@@ -7,6 +7,8 @@ use std::path::Path;
 use std::fs;
 use mime_guess;
 use tauri::Manager;
+use std::sync::atomic::{AtomicBool, Ordering};
+use cfg_if::cfg_if;
 use std::process::Command;
 use serde::{Serialize, Deserialize};
 
@@ -269,6 +271,8 @@ fn main() {
         last_update_time: Instant::now(),
     }));
 
+    static OVERLAY_RUNNING: AtomicBool = AtomicBool::new(false);
+
     tauri::Builder::default()
         .manage(system)
         .manage(network_stats)
@@ -294,7 +298,51 @@ fn main() {
             take_screenshot,
             play_pause_music,
             next_track,
-            previous_track
+            previous_track,
+            overlay_start,
+            overlay_stop,
+            overlay_status
         ])
         .run(tauri::generate_context!().expect("error while running tauri application"));
+}
+
+#[tauri::command]
+fn overlay_status() -> Result<bool, String> {
+    Ok(OVERLAY_RUNNING.load(Ordering::SeqCst))
+}
+
+#[tauri::command]
+fn overlay_start() -> Result<String, String> {
+    if OVERLAY_RUNNING.swap(true, Ordering::SeqCst) {
+        return Ok("overlay-already-running".into());
+    }
+
+    cfg_if! {
+        if #[cfg(feature = "overlay_raylib")] {
+            std::thread::spawn(|| {
+                use raylib::prelude::*;
+                let (mut rl, thread) = raylib::init().size(800, 450).title("SIST Overlay").build();
+                rl.set_target_fps(60);
+                while OVERLAY_RUNNING.load(Ordering::SeqCst) && !rl.window_should_close() {
+                    let mut d = rl.begin_drawing(&thread);
+                    d.clear_background(Color::Color { r: 0, g: 0, b: 0, a: 0 });
+                    // 半透明の円形HUD仮描画
+                    d.draw_circle(400, 225, 120.0, Color::new(255, 255, 255, 28));
+                    d.draw_circle_lines(400, 225, 160.0, Color::new(180, 200, 255, 120));
+                    d.draw_text("Halo HUD", 330, 212, 20, Color::new(200, 220, 255, 200));
+                }
+                OVERLAY_RUNNING.store(false, Ordering::SeqCst);
+            });
+            Ok("overlay-started".into())
+        } else {
+            OVERLAY_RUNNING.store(false, Ordering::SeqCst);
+            Err("overlay feature not enabled. build with --features overlay_raylib".into())
+        }
+    }
+}
+
+#[tauri::command]
+fn overlay_stop() -> Result<String, String> {
+    OVERLAY_RUNNING.store(false, Ordering::SeqCst);
+    Ok("overlay-stopped".into())
 }

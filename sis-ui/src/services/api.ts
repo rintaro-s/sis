@@ -151,6 +151,32 @@ export const api = {
       return { ok: true, path: filePath }
     }
   },
+
+  async overlayStatus(): Promise<boolean> {
+    try {
+      return await safeInvoke<boolean>('overlay_status')
+    } catch {
+      return false
+    }
+  },
+
+  async overlayStart(): Promise<{ ok: boolean; message?: string }> {
+    try {
+      const msg = await safeInvoke<string>('overlay_start')
+      return { ok: true, message: msg }
+    } catch (e) {
+      return { ok: false, message: (e as Error)?.message }
+    }
+  },
+
+  async overlayStop(): Promise<{ ok: boolean; message?: string }> {
+    try {
+      const msg = await safeInvoke<string>('overlay_stop')
+      return { ok: true, message: msg }
+    } catch (e) {
+      return { ok: false, message: (e as Error)?.message }
+    }
+  },
 }
 
 export type Api = typeof api

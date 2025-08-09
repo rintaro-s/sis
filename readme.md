@@ -109,3 +109,29 @@
 - **LLM**：gemma-3-12b-it-GGUF(Q5_K_M)/gemma-3-4b-it-GGUF(Q5_K_M)/Qwen3-14B-GGUF(Q4_k_m)＋ RAG ＋ agent機能
 - **SQLite**：UI設定・履歴保存
 - 災害情報取得の方法はsaigai.py参照
+
+---
+
+## 操作方法（新体験）
+
+- Alt+Space: 円形ランチャーを開閉
+- Ctrl(またはAlt)+Space 長押し: Halo HUD（カーソル位置に円形ヘルプ）を表示
+- Ctrl+K: コマンドパレットを開く（アクション・アプリ検索）
+- 下部バー: 入力欄に質問/指示をそのまま入力、🎤は長押しでプッシュトゥトーク（UIのみ）
+
+## Raylibオーバーレイ（任意・実験的）
+
+TauriバックエンドにRaylibベースの軽量オーバーレイを追加しました（featureフラグ）。
+
+### 有効化のビルド
+
+1. Raylib開発環境を用意（Linux推奨）
+2. 以下でビルド（featureを有効化）
+
+```bash
+cargo tauri build --features overlay_raylib
+```
+
+アプリ起動後は Ctrl+K →「Raylibオーバーレイ 切替」で起動/停止できます。
+
+注意: Windowsではビルド要件が増えます。未有効時はAPIは安全に失敗します。

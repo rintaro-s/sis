@@ -27,3 +27,13 @@ tauri-plugin-log = "2"
 notify = "6"
 mime_guess = "2"
 tauri-plugin-global-shortcut = "2"
+cfg-if = "1"
+
+[features]
+default = []
+# Raylibベースのフルオーバーレイ（Linux推奨）。有効化にはraylib開発環境が必要。
+overlay_raylib = ["raylib"]
+
+[dependencies.raylib]
+version = "5.0"
+optional = true

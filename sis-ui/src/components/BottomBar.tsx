@@ -23,7 +23,7 @@ function BottomBar() {
           className="chat-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="コマンドを入力してください... (例: help, status, scan)"
+          placeholder="Alt+Space でランチャー / Ctrl+Space ホールドで Halo HUD / ここに質問や指示もOK"
         />
         <span className="cursor-blink"></span>
       </form>
@@ -33,6 +33,9 @@ function BottomBar() {
           <div className="status-dot"></div>
           <span className="status-text">ONLINE</span>
         </div>
+        <button type="button" title="Push-To-Talk (長押しで録音)" className="send-button" onMouseDown={() => console.log('PTT start')} onMouseUp={() => console.log('PTT stop')}>
+          🎤
+        </button>
         
         <button 
           type="submit" 
