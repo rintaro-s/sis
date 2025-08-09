@@ -1,0 +1,300 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+use sysinfo::{System, SystemExt, CpuExt, NetworkExt, NetworksExt};
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
+use std::path::Path;
+use std::fs;
+use mime_guess;
+use tauri::Manager;
+use std::process::Command;
+use serde::{Serialize, Deserialize};
+
+struct NetworkStats {
+    last_received_bytes: u64,
+    last_transmitted_bytes: u64,
+    last_update_time: Instant,
+}
+
+#[tauri::command]
+fn get_system_info(system: tauri::State<System>, network_stats: tauri::State<Arc<Mutex<NetworkStats>>>) -> String {
+    let mut sys = system.inner().clone();
+    sys.refresh_cpu();
+    sys.refresh_memory();
+    sys.refresh_networks();
+
+    let cpu_usage = sys.global_cpu_info().cpu_usage();
+    let mem_usage = (sys.used_memory() as f64 / sys.total_memory() as f64 * 100.0) as u64;
+
+    let mut current_received_bytes = 0;
+    let mut current_transmitted_bytes = 0;
+
+    for (_interface_name, network) in sys.networks() {
+        current_received_bytes += network.received();
+        current_transmitted_bytes += network.transmitted();
+    }
+
+    let mut stats = network_stats.lock().unwrap();
+
+    let elapsed_time = stats.last_update_time.elapsed().as_secs_f64();
+
+    let download_speed = if elapsed_time > 0.0 {
+        ((current_received_bytes - stats.last_received_bytes) as f64 / elapsed_time / 1024.0 / 1024.0) as u64 // MBps
+    } else {
+        0
+    };
+
+    let upload_speed = if elapsed_time > 0.0 {
+        ((current_transmitted_bytes - stats.last_transmitted_bytes) as f64 / elapsed_time / 1024.0 / 1024.0) as u64 // MBps
+    } else {
+        0
+    };
+
+    stats.last_received_bytes = current_received_bytes;
+    stats.last_transmitted_bytes = current_transmitted_bytes;
+    stats.last_update_time = Instant::now();
+
+    format!("{{\"cpuUsage\":{},\"memUsage\":{},\"downloadSpeed\":{},\"uploadSpeed\":{}}}", cpu_usage, mem_usage, download_speed, upload_speed)
+}
+
+#[tauri::command]
+fn organize_file(file_path: String) -> Result<String, String> {
+    let path = Path::new(&file_path);
+    if !path.exists() {
+        return Err(format!("File does not exist: {}", file_path));
+    }
+
+    let mime_type = mime_guess::from_path(path).first_or_octet_stream();
+    let mut target_dir = Path::new("/home/rinta/Downloads/Others").to_path_buf(); // Default to Others
+
+    if mime_type.type_() == "image" {
+        target_dir = Path::new("/home/rinta/Images").to_path_buf();
+    } else if mime_type.type_() == "video" {
+        target_dir = Path::new("/home/rinta/Videos").to_path_buf();
+    } else if mime_type.type_() == "audio" {
+        target_dir = Path::new("/home/rinta/Music").to_path_buf();
+    } else if mime_type.type_() == "text" || mime_type.subtype() == "pdf" {
+        target_dir = Path::new("/home/rinta/Documents").to_path_buf();
+    } else if mime_type.type_() == "application" && (mime_type.subtype() == "zip" || mime_type.subtype() == "x-tar" || mime_type.subtype() == "x-rar-compressed") {
+        target_dir = Path::new("/home/rinta/Archives").to_path_buf();
+    }
+
+    if !target_dir.exists() {
+        fs::create_dir_all(&target_dir).map_err(|e| format!("Failed to create directory {:?}: {{}}", target_dir, e))?;
+    }
+
+    let file_name = path.file_name().ok_or("Invalid file name")?;
+    let dest_path = target_dir.join(file_name);
+
+    fs::rename(path, &dest_path).map_err(|e| format!("Failed to move file from {} to {:?}: {{}}", file_path, dest_path, e))?;
+
+    Ok(format!("File {} organized to {{:?}}", file_path, dest_path))
+}
+
+#[tauri::command]
+fn set_volume(volume: u32) -> Result<String, String> {
+    let output = Command::new("pactl")
+        .arg("set-sink-volume")
+        .arg("@DEFAULT_SINK@")
+        .arg(format!("{}%", volume))
+        .output();
+
+    match output {
+        Ok(output) => {
+            if output.status.success() {
+                Ok(format!("Volume set to {}%", volume))
+            } else {
+                Err(format!("Failed to set volume: {}", String::from_utf8_lossy(&output.stderr)))
+            }
+        }
+        Err(e) => Err(format!("Failed to execute pactl: {{}}", e)),
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct AppInfo {
+    name: String,
+    exec: String,
+}
+
+#[tauri::command]
+fn get_recent_apps() -> Result<Vec<AppInfo>, String> {
+    let mut apps = Vec::new();
+    let app_dirs = [
+        "/usr/share/applications",
+        "/usr/local/share/applications",
+        "/home/rinta/.local/share/applications", // User-specific applications
+    ];
+
+    for dir_path in app_dirs.iter() {
+        let path = Path::new(dir_path);
+        if path.exists() && path.is_dir() {
+            for entry in fs::read_dir(path).map_err(|e| format!("Failed to read directory {:?}: {{}}", path, e))? {
+                let entry = entry.map_err(|e| format!("Failed to read directory entry: {{}}", e))?;
+                let path = entry.path();
+                if path.is_file() && path.extension().map_or(false, |ext| ext == "desktop") {
+                    if let Ok(content) = fs::read_to_string(&path) {
+                        let name = content.lines()
+                            .find(|line| line.starts_with("Name="))
+                            .and_then(|line| line.strip_prefix("Name="))
+                            .unwrap_or("Unknown").to_string();
+                        let exec = content.lines()
+                            .find(|line| line.starts_with("Exec="))
+                            .and_then(|line| line.strip_prefix("Exec="))
+                            .unwrap_or("").to_string();
+                        
+                        if !name.is_empty() && !exec.is_empty() {
+                            apps.push(AppInfo { name, exec });
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(apps)
+}
+
+#[tauri::command]
+fn get_favorite_apps(app_handle: tauri::AppHandle) -> Result<Vec<AppInfo>, String> {
+    let path = app_handle.path_resolver().app_data_dir().unwrap().join("favorites.json");
+    if path.exists() {
+        let content = fs::read_to_string(&path).map_err(|e| format!("Failed to read favorites.json: {{}}", e))?;
+        let apps: Vec<AppInfo> = serde_json::from_str(&content).map_err(|e| format!("Failed to parse favorites.json: {{}}", e))?;
+        Ok(apps)
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+#[tauri::command]
+fn add_favorite_app(app_handle: tauri::AppHandle, app: AppInfo) -> Result<String, String> {
+    let path = app_handle.path_resolver().app_data_dir().unwrap().join("favorites.json");
+    let mut apps = get_favorite_apps(app_handle).unwrap_or_else(|_| Vec::new());
+
+    if !apps.iter().any(|a| a.name == app.name) {
+        apps.push(app);
+        let content = serde_json::to_string_pretty(&apps).map_err(|e| format!("Failed to serialize favorites: {{}}", e))?;
+        fs::write(&path, content).map_err(|e| format!("Failed to write favorites.json: {{}}", e))?;
+        Ok("App added to favorites".to_string())
+    } else {
+        Err("App already in favorites".to_string())
+    }
+}
+
+#[tauri::command]
+fn remove_favorite_app(app_handle: tauri::AppHandle, app_name: String) -> Result<String, String> {
+    let path = app_handle.path_resolver().app_data_dir().unwrap().join("favorites.json");
+    let mut apps = get_favorite_apps(app_handle).unwrap_or_else(|_| Vec::new());
+
+    let initial_len = apps.len();
+    apps.retain(|app| app.name != app_name);
+
+    if apps.len() < initial_len {
+        let content = serde_json::to_string_pretty(&apps).map_err(|e| format!("Failed to serialize favorites: {{}}", e))?;
+        fs::write(&path, content).map_err(|e| format!("Failed to write favorites.json: {{}}", e))?;
+        Ok("App removed from favorites".to_string())
+    } else {
+        Err("App not found in favorites".to_string())
+    }
+}
+
+#[tauri::command]
+fn take_screenshot() -> Result<String, String> {
+    let output = Command::new("gnome-screenshot")
+        .arg("--clipboard") // Copy to clipboard
+        .output();
+
+    match output {
+        Ok(output) => {
+            if output.status.success() {
+                Ok("Screenshot taken and copied to clipboard".to_string())
+            } else {
+                Err(format!("Failed to take screenshot: {}", String::from_utf8_lossy(&output.stderr)))
+            }
+        }
+        Err(e) => Err(format!("Failed to execute gnome-screenshot: {}", e)),
+    }
+}
+
+#[tauri::command]
+fn play_pause_music() -> Result<String, String> {
+    let output = Command::new("playerctl").arg("play-pause").output();
+    match output {
+        Ok(output) => {
+            if output.status.success() {
+                Ok("Music play/pause toggled".to_string())
+            } else {
+                Err(format!("Failed to toggle play/pause: {}", String::from_utf8_lossy(&output.stderr)))
+            }
+        }
+        Err(e) => Err(format!("Failed to execute playerctl: {}", e)),
+    }
+}
+
+#[tauri::command]
+fn next_track() -> Result<String, String> {
+    let output = Command::new("playerctl").arg("next").output();
+    match output {
+        Ok(output) => {
+            if output.status.success() {
+                Ok("Next track".to_string())
+            } else {
+                Err(format!("Failed to go to next track: {}", String::from_utf8_lossy(&output.stderr)))
+            }
+        }
+        Err(e) => Err(format!("Failed to execute playerctl: {}", e)),
+    }
+}
+
+#[tauri::command]
+fn previous_track() -> Result<String, String> {
+    let output = Command::new("playerctl").arg("previous").output();
+    match output {
+        Ok(output) => {
+            if output.status.success() {
+                Ok("Previous track".to_string())
+            } else {
+                Err(format!("Failed to go to previous track: {}", String::from_utf8_lossy(&output.stderr)))
+            }
+        }
+        Err(e) => Err(format!("Failed to execute playerctl: {}", e)),
+    }
+}
+
+fn main() {
+    let system = System::new_all();
+    let network_stats = Arc::new(Mutex::new(NetworkStats {
+        last_received_bytes: 0,
+        last_transmitted_bytes: 0,
+        last_update_time: Instant::now(),
+    }));
+
+    tauri::Builder::default()
+        .manage(system)
+        .manage(network_stats)
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .setup(|app| {
+            let window = app.get_window("main").unwrap();
+            let shortcut_manager = app.global_shortcut_manager();
+
+            shortcut_manager.register("Super", move || {
+                window.emit("super_key_pressed", ()).unwrap();
+            }).unwrap();
+
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            get_system_info,
+            organize_file,
+            set_volume,
+            get_recent_apps,
+            get_favorite_apps,
+            add_favorite_app,
+            remove_favorite_app,
+            take_screenshot,
+            play_pause_music,
+            next_track,
+            previous_track
+        ])
+        .run(tauri::generate_context!().expect("error while running tauri application"));
+}

@@ -1,0 +1,99 @@
+.home-screen {
+  padding-top: 30px; /* TopBar height */
+  padding-bottom: 50px; /* BottomBar height */
+  height: 100vh;
+  background-image: url('/home/rinta/デスクトップ/sis/theme_assets/desktop/wallpaper.png');
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  overflow: auto;
+  position: relative; /* For pseudo-element positioning */
+}
+
+.home-screen::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 70%);
+  animation: pulse-gradient 10s infinite alternate ease-in-out;
+  pointer-events: none;
+}
+
+@keyframes pulse-gradient {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.2);
+    opacity: 0.8;
+  }
+}
+
+.shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.shortcut-card {
+  width: 120px;
+  height: 120px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  border-radius: var(--border-radius-medium);
+  margin: 15px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-weight: bold;
+  text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.7);
+  box-shadow: var(--shadow-strong), var(--shadow-glow);
+  transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out, background 0.3s ease-in-out;
+  transform: rotate(-3deg) skew(-3deg);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  font-family: var(--font-family-heading);
+}
+
+.shortcut-card:hover {
+  transform: rotate(0deg) skew(0deg) scale(1.1);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.7), inset 0 0 15px rgba(255, 255, 255, 0.5);
+  background: linear-gradient(135deg, var(--color-secondary), var(--color-primary));
+}
+
+.shortcut-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: rgba(255, 255, 255, 0.1);
+  transform: rotate(45deg);
+  transform-origin: center center;
+  transition: transform 0.3s ease-in-out;
+  pointer-events: none; /* Allow clicks to pass through */
+}
+
+.shortcut-card:hover::before {
+  transform: rotate(0deg);
+}
+
+.shortcut-card img {
+  width: 60px;
+  height: 60px;
+  margin-bottom: 5px;
+  filter: drop-shadow(2px 2px 2px rgba(0, 0, 0, 0.7));
+}

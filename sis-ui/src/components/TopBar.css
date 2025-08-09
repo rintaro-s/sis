@@ -1,0 +1,47 @@
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 30px;
+  background-image: url('/home/rinta/デスクトップ/sis/theme_assets/desktop/taskbar_background.png');
+  background-size: cover;
+  background-position: center;
+  color: white;
+  padding: 0 10px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  font-size: 0.8em;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+.top-bar img {
+  height: 20px;
+  filter: drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.5));
+}
+
+.system-info span, .datetime span {
+  margin-right: 15px;
+  font-family: var(--font-family-heading);
+}
+
+.notification-center {
+  position: relative;
+  cursor: pointer;
+}
+
+.notification-tooltip {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background-color: var(--color-dark-overlay);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 5px;
+  white-space: nowrap;
+  font-size: 0.9em;
+  z-index: 1001;
+  box-shadow: var(--shadow-strong);
+}

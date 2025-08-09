@@ -1,0 +1,45 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Orbitron:wght@400;700&display=swap');
+
+:root {
+  --color-primary: #4682B4; /* SteelBlue */
+  --color-secondary: #6495ED; /* CornflowerBlue */
+  --color-dark-overlay: rgba(0, 0, 0, 0.5);
+  --color-light-overlay: rgba(255, 255, 255, 0.2);
+  --font-family-main: 'Inter', sans-serif;
+  --font-family-heading: 'Orbitron', sans-serif;
+  --border-radius-medium: 15px;
+  --shadow-strong: 0 5px 15px rgba(0, 0, 0, 0.5);
+  --shadow-glow: inset 0 0 10px rgba(255, 255, 255, 0.3);
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family-main);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  cursor: url('/home/rinta/デスクトップ/sis/theme_assets/cursors/cursor_default.png'), auto;
+}
+
+/* Custom cursors for different states */
+a, button, .clickable, .shortcut-card {
+  cursor: url('/home/rinta/デスクトップ/sis/theme_assets/cursors/cursor_hand.png'), pointer;
+}
+
+input[type="text"], textarea {
+  cursor: url('/home/rinta/デスクトップ/sis/theme_assets/cursors/cursor_text.png'), text;
+}
+
+.resize-handle {
+  cursor: url('/home/rinta/デスクトップ/sis/theme_assets/cursors/cursor_resize.png'), ew-resize;
+}
+
+.loading, .busy {
+  cursor: url('/home/rinta/デスクトップ/sis/theme_assets/cursors/cursor_busy.png'), wait;
+}
+
+/* General styles for the app container */
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
