@@ -1,126 +1,98 @@
 import { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import type React from 'react';
+import { api } from '../services/api';
+import type { AppInfo } from '../services/api';
+import { IconSettings, IconApp, IconFolder, IconTerminal } from '../assets/icons';
 import './CircularMenu.css';
 
 interface CircularMenuProps {
   isVisible: boolean;
-  cursorPos: { x: number; y: number; };
-  onMenuItemClick: (itemName: string) => void;
+  onClose: () => void;
 }
 
-interface AppInfo {
-  name: string;
-  exec: string;
-}
-
-function CircularMenu({ isVisible, cursorPos, onMenuItemClick }: CircularMenuProps) {
-  const [menuItems] = useState([
-    { name: 'Volume', icon: '/home/rinta/デスクトップ/sis/theme_assets/icons/icon_settings.png', type: 'volume' },
-    { name: 'Recent Apps', icon: '/home/rinta/デスクトップ/sis/theme_assets/icons/icon_app_default.png', type: 'recent_apps' },
-    { name: 'Favorite Apps', icon: '/home/rinta/デスクトップ/sis/theme_assets/icons/icon_app_default.png', type: 'favorite_apps' },
-    { name: 'Screenshot', icon: '/home/rinta/デスクトップ/sis/theme_assets/icons/icon_app_default.png', type: 'screenshot' },
-    { name: 'Music', icon: '/home/rinta/デスクトップ/sis/theme_assets/icons/icon_app_default.png', type: 'music_control' },
-  ]);
-
+function CircularMenu({ isVisible, onClose }: CircularMenuProps) {
+  const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
   const [recentApps, setRecentApps] = useState<AppInfo[]>([]);
-  const [showRecentApps, setShowRecentApps] = useState(false);
-  const [favoriteApps, setFavoriteApps] = useState<AppInfo[]>([]);
-  const [showFavoriteApps, setShowFavoriteApps] = useState(false);
-  const [showMusicControls, setShowMusicControls] = useState(false);
+  
+  const menuItems = [
+    { name: 'ファイル', icon: IconFolder, action: 'file_manager' },
+    { name: 'ターミナル', icon: IconTerminal, action: 'terminal' },
+    { name: 'ドキュメント', icon: IconFolder, action: 'documents' },
+    { name: 'アプリ', icon: IconApp, action: 'apps' },
+    { name: 'システム', icon: IconSettings, action: 'system' },
+    { name: 'スクリーン', icon: IconSettings, action: 'screenshot' },
+    { name: 'ミュージック', icon: IconApp, action: 'music' },
+    { name: 'ボリューム', icon: IconSettings, action: 'volume' },
+  ];
+
+  const handleItemClick = async (action: string) => {
+    switch (action) {
+      case 'file_manager':
+        console.log('Opening file manager...');
+        break;
+      case 'terminal':
+        console.log('Opening terminal...');
+        break;
+      case 'documents':
+        console.log('Opening documents...');
+        break;
+      case 'apps':
+        try {
+          const apps = await api.getRecentApps();
+          setRecentApps(apps);
+          setActiveSubmenu('apps');
+        } catch (error) {
+          console.error('Failed to get apps:', error);
+        }
+        break;
+      case 'system':
+        setActiveSubmenu('system');
+        break;
+      case 'screenshot':
+        try {
+          const result = await api.takeScreenshot();
+          console.log(result);
+          onClose();
+        } catch (error) {
+          console.error('Failed to take screenshot:', error);
+        }
+        break;
+      case 'music':
+        setActiveSubmenu('music');
+        break;
+      case 'volume':
+        setActiveSubmenu('volume');
+        break;
+      default:
+        onClose();
+    }
+  };
 
   const handleVolumeChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const volume = parseInt(event.target.value);
     try {
-      await invoke('set_volume', { volume });
+      await api.setVolume(volume);
       console.log(`Volume set to ${volume}%`);
     } catch (error) {
       console.error('Failed to set volume:', error);
     }
   };
 
-  const handleRecentAppsClick = async () => {
+  const handleMusicControl = async (action: string) => {
     try {
-      const apps: AppInfo[] = await invoke('get_recent_apps');
-      setRecentApps(apps);
-      setShowRecentApps(true);
-      setShowFavoriteApps(false); // Hide other lists
-      setShowMusicControls(false);
+      switch (action) {
+        case 'play_pause':
+          await api.playPauseMusic();
+          break;
+        case 'next':
+          await api.nextTrack();
+          break;
+        case 'previous':
+          await api.previousTrack();
+          break;
+      }
     } catch (error) {
-      console.error('Failed to get recent apps:', error);
-    }
-  };
-
-  const handleFavoriteAppsClick = async () => {
-    try {
-      const apps: AppInfo[] = await invoke('get_favorite_apps');
-      setFavoriteApps(apps);
-      setShowFavoriteApps(true);
-      setShowRecentApps(false); // Hide other lists
-      setShowMusicControls(false);
-    } catch (error) {
-      console.error('Failed to get favorite apps:', error);
-    }
-  };
-
-  const handleAddFavorite = async (app: AppInfo) => {
-    try {
-      const result = await invoke('add_favorite_app', { app });
-      console.log(result);
-      handleFavoriteAppsClick(); // Refresh list
-    } catch (error) {
-      console.error('Failed to add favorite app:', error);
-    }
-  };
-
-  const handleRemoveFavorite = async (appName: string) => {
-    try {
-      const result = await invoke('remove_favorite_app', { appName });
-      console.log(result);
-      handleFavoriteAppsClick(); // Refresh list
-    } catch (error) {
-      console.error('Failed to remove favorite app:', error);
-    }
-  };
-
-  const handleScreenshot = async () => {
-    try {
-      const result = await invoke('take_screenshot');
-      console.log(result);
-    } catch (error) {
-      console.error('Failed to take screenshot:', error);
-    }
-  };
-
-  const handleMusicControlClick = () => {
-    setShowMusicControls(true);
-    setShowRecentApps(false);
-    setShowFavoriteApps(false);
-  };
-
-  const handlePlayPause = async () => {
-    try {
-      const result = await invoke('play_pause_music');
-      console.log(result);
-    } catch (error) {
-      console.error('Failed to toggle play/pause:', error);
-    }
-  };
-
-  const handleNextTrack = async () => {
-    try {
-      const result = await invoke('next_track');
-      console.log(result);
-    } catch (error) {
-      console.error('Failed to go to next track:', error);
-    }
-  };
-
-  const handlePreviousTrack = async () => {
-    try {
-      const result = await invoke('previous_track');
-      console.log(result);
-    } catch (error) {
-      console.error('Failed to go to previous track:', error);
+      console.error(`Failed to ${action}:`, error);
     }
   };
 
@@ -129,96 +101,80 @@ function CircularMenu({ isVisible, cursorPos, onMenuItemClick }: CircularMenuPro
   }
 
   return (
-    <div 
-      className="circular-menu-overlay"
-      style={{ top: cursorPos.y, left: cursorPos.x }}
-    >
-      <div className="circular-menu-container">
+    <>
+      <div className="menu-overlay" onClick={onClose} />
+      <div className="circular-menu">
+        <div className="menu-center" onClick={onClose}>
+          <img src={IconSettings} alt="menu" className="center-icon" />
+        </div>
+        
         {menuItems.map((item, index) => (
           <div 
             key={index} 
-            className="circular-menu-item"
-            style={{
-              transform: `rotate(${index * (360 / menuItems.length)}deg) translate(100px) rotate(-${index * (360 / menuItems.length)}deg)`
-            }}
-            onClick={() => {
-              if (item.type === 'recent_apps') {
-                handleRecentAppsClick();
-              } else if (item.type === 'favorite_apps') {
-                handleFavoriteAppsClick();
-              } else if (item.type === 'screenshot') {
-                handleScreenshot();
-              } else if (item.type === 'music_control') {
-                handleMusicControlClick();
-              } else {
-                onMenuItemClick(item.name);
-              }
-            }}
+            className="menu-item"
+            onClick={() => handleItemClick(item.action)}
           >
             <img src={item.icon} alt={item.name} />
-            <span>{item.name}</span>
-            {item.type === 'volume' && (
-              <input 
-                type="range" 
-                min="0" 
-                max="100" 
-                defaultValue="50" 
-                className="volume-slider"
-                onClick={(e) => e.stopPropagation()} // Prevent menu item click when dragging slider
-                onChange={handleVolumeChange}
-              />
-            )}
+            <div className="item-tooltip">{item.name}</div>
           </div>
         ))}
-      </div>
 
-      {showRecentApps && (
-        <div className="app-list-container">
-          <h4>最近のアプリ</h4>
-          <ul>
-            {recentApps.length > 0 ? (
-              recentApps.map((app, index) => (
-                <li key={index}>
-                  {app.name}
-                  <button onClick={() => handleAddFavorite(app)}>Add to Fav</button>
-                </li>
-              ))
-            ) : (
-              <li>最近のアプリはありません</li>
-            )}
-          </ul>
-        </div>
-      )}
-
-      {showFavoriteApps && (
-        <div className="app-list-container">
-          <h4>お気に入りアプリ</h4>
-          <ul>
-            {favoriteApps.length > 0 ? (
-              favoriteApps.map((app, index) => (
-                <li key={index}>
-                  {app.name}
-                  <button onClick={() => handleRemoveFavorite(app.name)}>Remove</button>
-                </li>
-              ))
-            ) : (
-              <li>お気に入りアプリはありません</li>
-            )}
-          </ul>
-        </div>
-      )}
-
-      {showMusicControls && (
-        <div className="music-controls-container">
-          <h4>音楽操作</h4>
-          <div className="music-buttons">
-            <button onClick={handlePreviousTrack}>⏮️</button>
-            <button onClick={handlePlayPause}>⏯️</button>
-            <button onClick={handleNextTrack}>⏭️</button>
+        {activeSubmenu === 'apps' && (
+          <div className="app-list-container">
+            <h4>アプリケーション</h4>
+            <ul>
+              {recentApps.length > 0 ? (
+                recentApps.map((app, index) => (
+                  <li key={index}>
+                    {app.name}
+                    <button onClick={() => console.log(`Starting ${app.name}`)}>起動</button>
+                  </li>
+                ))
+              ) : (
+                <li>アプリがありません</li>
+              )}
+            </ul>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+
+        {activeSubmenu === 'system' && (
+          <div className="app-list-container">
+            <h4>システム</h4>
+            <ul>
+              <li>CPU使用率: 45% <button>詳細</button></li>
+              <li>メモリ使用率: 62% <button>詳細</button></li>
+              <li>ディスク容量: 78% <button>詳細</button></li>
+              <li>ネットワーク <button>詳細</button></li>
+            </ul>
+          </div>
+        )}
+
+        {activeSubmenu === 'music' && (
+          <div className="music-controls-container">
+            <h4>ミュージック</h4>
+            <div className="music-buttons">
+              <button onClick={() => handleMusicControl('previous')}>⏮</button>
+              <button onClick={() => handleMusicControl('play_pause')}>⏯</button>
+              <button onClick={() => handleMusicControl('next')}>⏭</button>
+            </div>
+          </div>
+        )}
+
+        {activeSubmenu === 'volume' && (
+          <div className="music-controls-container">
+            <h4>ボリューム</h4>
+            <input 
+              type="range" 
+              min="0" 
+              max="100" 
+              defaultValue="50" 
+              className="volume-slider"
+              onChange={handleVolumeChange}
+            />
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 

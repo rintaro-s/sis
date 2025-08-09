@@ -1,14 +1,15 @@
 
 import './AppStore.css';
+import { IconApp, IconTerminal, IconSettings, IconDoc, IconFolder } from '../assets/icons';
 
 function AppStore() {
   const apps = [
-    { name: 'Browser', icon: '/home/rinta/デスクトップ/sis/theme_assets/icons/icon_app_default.png' },
-    { name: 'Terminal', icon: '/home/rinta/デスクトップ/sis/theme_assets/icons/icon_terminal.png' },
-    { name: 'Settings', icon: '/home/rinta/デスクトップ/sis/theme_assets/icons/icon_settings.png' },
-    { name: 'Documents', icon: '/home/rinta/デスクトップ/sis/theme_assets/icons/icon_file_document.png' },
-    { name: 'Folder', icon: '/home/rinta/デスクトップ/sis/theme_assets/icons/icon_folder.png' },
-    { name: 'Game', icon: '/home/rinta/デスクトップ/sis/theme_assets/icons/icon_app_default.png' },
+    { name: 'Browser', icon: IconApp },
+    { name: 'Terminal', icon: IconTerminal },
+    { name: 'Settings', icon: IconSettings },
+    { name: 'Documents', icon: IconDoc },
+    { name: 'Folder', icon: IconFolder },
+    { name: 'Game', icon: IconApp },
   ];
 
   return (

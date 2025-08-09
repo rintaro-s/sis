@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { api } from '../services/api';
+import { IconSettings } from '../assets/icons';
 import './TopBar.css';
 
 function TopBar() {
@@ -12,21 +13,11 @@ function TopBar() {
 
   useEffect(() => {
     const getSystemInfo = async () => {
-      try {
-        const info: string = await invoke('get_system_info');
-        const parsedInfo = JSON.parse(info);
-        setCpuUsage(parsedInfo.cpuUsage);
-        setMemUsage(parsedInfo.memUsage);
-        setDownloadSpeed(parsedInfo.downloadSpeed);
-        setUploadSpeed(parsedInfo.uploadSpeed);
-      } catch (error) {
-        console.error('Failed to get system info:', error);
-        // Fallback to dummy values if there's an error
-        setCpuUsage(50);
-        setMemUsage(60);
-        setDownloadSpeed(0);
-        setUploadSpeed(0);
-      }
+      const info = await api.getSystemInfo();
+      setCpuUsage(info.cpuUsage);
+      setMemUsage(info.memUsage);
+      setDownloadSpeed(info.downloadSpeed);
+      setUploadSpeed(info.uploadSpeed);
     };
 
     getSystemInfo();
@@ -43,24 +34,39 @@ function TopBar() {
   }, []);
 
   const formattedTime = currentTime.toLocaleDateString('ja-JP', {
-    year: 'numeric',
+    year: '2-digit',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
     hour12: false,
-  }).replace(/\//g, '/');
+  }).replace(/\//g, '.');
+
+  const formattedDate = currentTime.getFullYear() + '年' + 
+    String(currentTime.getMonth() + 1).padStart(2, '0') + '月' + 
+    String(currentTime.getDate()).padStart(2, '0') + '日';
+
+  const Gauge = ({ label, value, unit = '%' }: { label: string; value: number; unit?: string }) => (
+    <div className="stat-gauge">
+      <div className="stat-label">{label}</div>
+      <div className="gauge-container">
+        <div className="gauge-fill" style={{ width: `${Math.min(value, 100)}%` }}></div>
+      </div>
+      <div className="stat-value">{value.toFixed(1)}{unit}</div>
+    </div>
+  );
 
   return (
     <div className="top-bar">
       <div className="system-info">
-        <span>CPU: {cpuUsage.toFixed(1)}%</span>
-        <span>MEM: {memUsage}%</span>
-        <span>DL: {downloadSpeed}MB/s</span>
-        <span>UL: {uploadSpeed}MB/s</span>
+        <Gauge label="CPU" value={cpuUsage} />
+        <Gauge label="MEM" value={memUsage} />
+        <Gauge label="DL" value={downloadSpeed} unit="MB/s" />
+        <Gauge label="UL" value={uploadSpeed} unit="MB/s" />
       </div>
       <div className="datetime">
+        <span>{formattedDate}</span>
         <span>{formattedTime}</span>
       </div>
       <div 
@@ -68,10 +74,10 @@ function TopBar() {
         onMouseEnter={() => setShowNotificationTooltip(true)}
         onMouseLeave={() => setShowNotificationTooltip(false)}
       >
-        <img src="/home/rinta/デスクトップ/sis/theme_assets/icons/icon_settings.png" alt="settings" />
+        <img src={IconSettings} alt="control-panel" />
         {showNotificationTooltip && (
           <div className="notification-tooltip">
-            通知はありません
+            制御パネル
           </div>
         )}
       </div>

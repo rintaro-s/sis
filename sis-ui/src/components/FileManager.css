@@ -1,20 +1,21 @@
 .file-manager {
-  background-color: rgba(0, 0, 0, 0.6);
-  border-radius: var(--border-radius-medium);
-  padding: 20px;
+  background: var(--bg-panel);
+  border-radius: var(--border-radius-large);
+  padding: 24px;
   margin: 20px;
-  color: white;
+  color: var(--text-primary);
   text-align: center;
-  box-shadow: var(--shadow-strong);
-  backdrop-filter: blur(5px); /* Frosted glass effect */
+  box-shadow: var(--shadow-soft), var(--glow-primary);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(167, 199, 231, 0.2);
 }
 
 .file-manager h3 {
   font-family: var(--font-family-heading);
-  color: var(--color-secondary);
+  color: var(--color-primary);
   margin-bottom: 20px;
-  font-size: 1.5em;
-  text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.7);
+  font-size: 1.4em;
+  font-weight: 600;
 }
 
 .folder-categories {

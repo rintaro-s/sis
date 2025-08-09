@@ -3,44 +3,45 @@ import { useState } from 'react';
 import './BottomBar.css';
 
 function BottomBar() {
-  const [isChatBarFocused, setIsChatBarFocused] = useState(false);
-  const [showAppLauncherTooltip, setShowAppLauncherTooltip] = useState(false);
-  const [showControlCenterTooltip, setShowControlCenterTooltip] = useState(false);
+  const [input, setInput] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (input.trim()) {
+      console.log('Command:', input);
+      // Here would be API call to process command
+      setInput('');
+    }
+  };
 
   return (
     <div className="bottom-bar">
-      <div 
-        className="app-launcher"
-        onMouseEnter={() => setShowAppLauncherTooltip(true)}
-        onMouseLeave={() => setShowAppLauncherTooltip(false)}
-      >
-        <img src="/home/rinta/デスクトップ/sis/theme_assets/icons/icon_app_default.png" alt="launcher" />
-        {showAppLauncherTooltip && (
-          <div className="bottom-bar-tooltip">
-            アプリランチャー
-          </div>
-        )}
-      </div>
-      <div 
-        className="control-center"
-        onMouseEnter={() => setShowControlCenterTooltip(true)}
-        onMouseLeave={() => setShowControlCenterTooltip(false)}
-      >
-        <img src="/home/rinta/デスクトップ/sis/theme_assets/icons/icon_settings.png" alt="settings" />
-        {showControlCenterTooltip && (
-          <div className="bottom-bar-tooltip">
-            コントロールセンター
-          </div>
-        )}
-      </div>
-      <div className="llm-chat-bar">
+      <form onSubmit={handleSubmit} className="command-prompt">
+        <span className="prompt-prefix">SIS$</span>
         <input
           type="text"
-          placeholder="LLMに話しかける..."
-          onFocus={() => setIsChatBarFocused(true)}
-          onBlur={() => setIsChatBarFocused(false)}
-          className={isChatBarFocused ? 'focused' : ''}
+          className="chat-input"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="コマンドを入力してください... (例: help, status, scan)"
         />
+        <span className="cursor-blink"></span>
+      </form>
+      
+      <div className="action-buttons">
+        <div className="status-indicator">
+          <div className="status-dot"></div>
+          <span className="status-text">ONLINE</span>
+        </div>
+        
+        <button 
+          type="submit" 
+          className="send-button"
+          onClick={handleSubmit}
+          disabled={!input.trim()}
+        >
+          ▶
+        </button>
       </div>
     </div>
   );

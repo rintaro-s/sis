@@ -1,15 +1,51 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Orbitron:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600&family=Inter:wght@300;400;500;600&display=swap');
 
 :root {
-  --color-primary: #4682B4; /* SteelBlue */
-  --color-secondary: #6495ED; /* CornflowerBlue */
-  --color-dark-overlay: rgba(0, 0, 0, 0.5);
-  --color-light-overlay: rgba(255, 255, 255, 0.2);
-  --font-family-main: 'Inter', sans-serif;
-  --font-family-heading: 'Orbitron', sans-serif;
-  --border-radius-medium: 15px;
-  --shadow-strong: 0 5px 15px rgba(0, 0, 0, 0.5);
-  --shadow-glow: inset 0 0 10px rgba(255, 255, 255, 0.3);
+  /* Ethereal Pastel UI Theme - Blue Archive inspired */
+  --color-primary: #a7c7e7; /* soft sky blue */
+  --color-secondary: #e6d7ff; /* lavender */
+  --color-accent: #ffd1dc; /* soft pink */
+  --color-danger: #ffc9c9; /* soft coral */
+  --color-success: #c7f0c7; /* mint green */
+  --color-warning: #fff2cd; /* cream yellow */
+  
+  /* Backgrounds - luminous and translucent */
+  --bg-void: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 30%, #f1f5f9 100%);
+  --bg-panel: rgba(255, 255, 255, 0.75);
+  --bg-elevated: rgba(248, 250, 252, 0.85);
+  --bg-glass: rgba(255, 255, 255, 0.4);
+  --bg-glow: radial-gradient(circle, rgba(167, 199, 231, 0.1) 0%, transparent 70%);
+  
+  /* Text colors - soft and readable */
+  --text-primary: #334155;
+  --text-secondary: #64748b;
+  --text-glow: #2563eb;
+  --text-magic: #8b5cf6;
+  --text-dim: #94a3b8;
+  
+  /* Soft glows and ethereal effects */
+  --glow-primary: 0 4px 20px rgba(167, 199, 231, 0.3);
+  --glow-secondary: 0 4px 15px rgba(230, 215, 255, 0.25);
+  --glow-accent: 0 4px 12px rgba(255, 209, 220, 0.3);
+  --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-depth: 0 8px 32px rgba(0, 0, 0, 0.08);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  
+  /* Fonts - clean and readable */
+  --font-family-main: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-family-heading: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-family-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  
+  /* Border radius - soft and rounded */
+  --border-radius-small: 8px;
+  --border-radius-medium: 12px;
+  --border-radius-large: 20px;
+  --border-radius-organic: 16px;
+  
+  /* Animations - gentle and smooth */
+  --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-bounce: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --transition-glow: all 0.4s ease-out;
 }
 
 body {
@@ -17,29 +53,84 @@ body {
   font-family: var(--font-family-main);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  cursor: url('/home/rinta/デスクトップ/sis/theme_assets/cursors/cursor_default.png'), auto;
+  cursor: default;
+  background: var(--bg-void);
+  overflow: hidden; 
+  color: var(--text-primary);
+  font-weight: 400;
 }
 
-/* Custom cursors for different states */
-a, button, .clickable, .shortcut-card {
-  cursor: url('/home/rinta/デスクトップ/sis/theme_assets/cursors/cursor_hand.png'), pointer;
+/* Ethereal cursors for delicate interactions */
+a, button, .clickable, .shortcut-card, .game-button { 
+  cursor: pointer; 
+  transition: var(--transition-smooth);
+}
+input[type="text"], textarea { cursor: text; }
+.resize-handle { cursor: ew-resize; }
+.loading, .busy { cursor: wait; }
+
+/* Gentle glow effects for interactivity */
+.glow-effect {
+  position: relative;
+  transition: var(--transition-glow);
+}
+.glow-effect::before {
+  content: '';
+  position: absolute;
+  top: -1px; left: -1px; right: -1px; bottom: -1px;
+  background: var(--bg-glow);
+  border-radius: inherit;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.glow-effect:hover::before {
+  opacity: 1;
 }
 
-input[type="text"], textarea {
-  cursor: url('/home/rinta/デスクトップ/sis/theme_assets/cursors/cursor_text.png'), text;
+/* Soft animations for ethereal feeling */
+@keyframes gentle-pulse {
+  0%, 100% { 
+    box-shadow: var(--glow-primary);
+    transform: scale(1);
+  }
+  50% { 
+    box-shadow: var(--glow-primary), 0 6px 25px rgba(167, 199, 231, 0.4);
+    transform: scale(1.02);
+  }
 }
 
-.resize-handle {
-  cursor: url('/home/rinta/デスクトップ/sis/theme_assets/cursors/cursor_resize.png'), ew-resize;
+@keyframes float-ethereal {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50% { transform: translateY(-2px) scale(1.01); }
 }
 
-.loading, .busy {
-  cursor: url('/home/rinta/デスクトップ/sis/theme_assets/cursors/cursor_busy.png'), wait;
+@keyframes shimmer-light {
+  0% { background-position: -100px 0; opacity: 0; }
+  50% { opacity: 1; }
+  100% { background-position: 100px 0; opacity: 0; }
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+/* Soft geometric shapes for delicate panels */
+.soft-rounded {
+  border-radius: var(--border-radius-organic);
+}
+
+.glass-panel {
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 /* General styles for the app container */
-.app {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
+.app { 
+  display: flex; 
+  flex-direction: column; 
+  min-height: 100vh; 
+  position: relative;
 }

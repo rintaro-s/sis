@@ -1,74 +1,140 @@
 .bottom-bar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  height: 50px;
-  background-image: url('/home/rinta/デスクトップ/sis/theme_assets/desktop/taskbar_background.png');
-  background-size: cover;
-  background-position: center;
-  color: white;
-  padding: 0 10px;
+  height: 58px;
+  background: var(--bg-panel);
+  border-top: 1px solid rgba(167, 199, 231, 0.15);
+  color: var(--text-primary);
+  padding: 0 18px;
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  bottom: 0; left: 0; right: 0;
   z-index: 1000;
+  font-family: var(--font-family-ui);
+  backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: var(--shadow-soft);
 }
 
-.llm-chat-bar {
-  flex-grow: 1;
+.command-prompt {
   display: flex;
-  justify-content: flex-end;
-  margin-left: 20px;
-  position: relative; /* For positioning the input */
-}
-
-.llm-chat-bar input {
-  width: 50px; /* Very small initial width */
-  background-color: var(--color-light-overlay);
-  border: none;
-  color: white;
-  padding: 5px 10px;
+  align-items: center;
+  flex: 1;
+  background: var(--bg-glass);
+  border: 1px solid rgba(167, 199, 231, 0.2);
   border-radius: var(--border-radius-medium);
-  transition: width 0.3s ease-in-out, transform 0.3s ease-in-out, background-color 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
-  transform: translateX(calc(100% + 20px)); /* Initially off-screen to the right, with some margin */
-  opacity: 0; /* Initially hidden */
-  position: absolute;
-  right: 0;
-  bottom: 0;
-}
-
-.llm-chat-bar input.focused {
-  width: 300px; /* Expanded width on focus */
-  background-color: rgba(255, 255, 255, 0.4);
-  transform: translateX(0); /* Move into view */
-  opacity: 1; /* Fully visible */
-  box-shadow: 0 0 15px rgba(100, 149, 237, 0.7); /* Subtle blue glow */
-}
-
-.bottom-bar img {
-  height: 30px;
-  margin: 0 5px;
-  filter: drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.5));
-}
-
-.app-launcher, .control-center {
+  padding: 10px 14px;
+  margin-right: 14px;
+  box-shadow: var(--glow-primary), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   position: relative;
-  cursor: pointer;
+  overflow: hidden;
+  backdrop-filter: blur(15px);
 }
 
-.bottom-bar-tooltip {
+.command-prompt::before {
+  content: '';
   position: absolute;
-  bottom: 100%; /* Position above the icon */
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: var(--color-dark-overlay);
-  color: white;
-  padding: 5px 10px;
-  border-radius: 5px;
-  white-space: nowrap;
+  top: 0; left: -100%; right: 0; bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(167, 199, 231, 0.08), transparent);
+  animation: breathe 4s infinite ease-in-out;
+}
+
+.prompt-prefix {
+  color: var(--color-success);
+  font-family: var(--font-family-ui);
+  font-weight: 500;
+  margin-right: 8px;
+  font-size: 0.95em;
+}
+
+.chat-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-family-ui);
   font-size: 0.9em;
-  z-index: 1001;
-  box-shadow: var(--shadow-strong);
-  margin-bottom: 5px; /* Space between icon and tooltip */
+  font-weight: 400;
+  letter-spacing: 0.3px;
+}
+
+.chat-input::placeholder {
+  color: var(--text-dim);
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.cursor-blink {
+  display: inline-block;
+  width: 1px;
+  height: 1.1em;
+  background: var(--color-primary);
+  margin-left: 3px;
+  animation: gentle-pulse 1.5s infinite;
+  opacity: 0.8;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-glass);
+  padding: 6px 10px;
+  border-radius: var(--border-radius-medium);
+  border: 1px solid rgba(230, 215, 255, 0.2);
+  box-shadow: var(--glow-secondary);
+  backdrop-filter: blur(15px);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-success);
+  animation: breathe 2s infinite;
+  box-shadow: 0 0 8px rgba(199, 240, 199, 0.6);
+}
+
+.status-text {
+  font-size: 0.8em;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.send-button {
+  width: 38px;
+  height: 38px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  border: 1px solid rgba(167, 199, 231, 0.3);
+  border-radius: 50%;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-bounce);
+  box-shadow: var(--glow-primary);
+  font-size: 1em;
+  font-weight: 500;
+  backdrop-filter: blur(10px);
+}
+
+.send-button:hover:not(:disabled) {
+  transform: scale(1.08) translateY(-1px);
+  box-shadow: var(--glow-primary), 0 4px 15px rgba(167, 199, 231, 0.4);
+  border-color: var(--color-accent);
+}
+
+.send-button:active {
+  transform: scale(0.98);
+}
+
+.send-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

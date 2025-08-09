@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { api } from '../services/api';
+import { IconFolder } from '../assets/icons';
 import './FileManager.css';
 
 function FileManager() {
@@ -8,9 +9,9 @@ function FileManager() {
   const handleOrganizeFiles = async () => {
     // This is a placeholder for now. In a real scenario, you'd get a list of files to organize.
     // For demonstration, let's assume a dummy file path.
-    const dummyFilePath = "/home/rinta/Downloads/test_image.jpg"; // Replace with a real path for testing
+    const dummyFilePath = "C:/Users/user/Downloads/test_image.jpg"; // ダミーパス（Windows向け）
     try {
-      const result = await invoke('organize_file', { filePath: dummyFilePath });
+      const result = await api.organizeFile(dummyFilePath);
       console.log(result);
       setFilesOrganized(true);
       setTimeout(() => setFilesOrganized(false), 3000); // Hide message after 3 seconds
@@ -24,22 +25,22 @@ function FileManager() {
       <h3>ファイル管理</h3>
       <div className="folder-categories">
         <div className="folder-card">
-          <img src="/home/rinta/デスクトップ/sis/theme_assets/icons/icon_folder.png" alt="Images" />
+          <img src={IconFolder} alt="Images" />
           <span>画像</span>
           <span className="file-count">📁 120</span>
         </div>
         <div className="folder-card">
-          <img src="/home/rinta/デスクトップ/sis/theme_assets/icons/icon_folder.png" alt="Documents" />
+          <img src={IconFolder} alt="Documents" />
           <span>ドキュメント</span>
           <span className="file-count">📁 85</span>
         </div>
         <div className="folder-card">
-          <img src="/home/rinta/デスクトップ/sis/theme_assets/icons/icon_folder.png" alt="Videos" />
+          <img src={IconFolder} alt="Videos" />
           <span>動画</span>
           <span className="file-count">📁 30</span>
         </div>
         <div className="folder-card">
-          <img src="/home/rinta/デスクトップ/sis/theme_assets/icons/icon_folder.png" alt="Others" />
+          <img src={IconFolder} alt="Others" />
           <span>その他</span>
           <span className="file-count">📁 50</span>
         </div>
