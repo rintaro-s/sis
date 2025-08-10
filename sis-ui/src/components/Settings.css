@@ -2,8 +2,8 @@
   background: var(--bg-panel);
   backdrop-filter: blur(20px) saturate(180%);
   border-radius: var(--border-radius-large);
-  padding: 24px;
-  margin: 20px;
+  padding: 16px 16px 20px;
+  margin: 0;
   color: var(--text-primary);
   text-align: center;
   box-shadow: var(--shadow-soft), var(--glow-primary);

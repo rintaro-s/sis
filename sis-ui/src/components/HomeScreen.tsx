@@ -8,7 +8,9 @@ import './HomeScreen.css';
 function HomeScreen() {
   return (
     <div className="home-screen">
-      <div className="shortcuts">
+      <div className="dashboard-grid">
+      <div className="panel shortcuts-panel">
+        <div className="shortcuts">
         <div className="shortcut-card">
           <img src={IconApp} alt="App" />
           <span>App 1</span>
@@ -33,10 +35,12 @@ function HomeScreen() {
           <img src={IconApp} alt="App" />
           <span>Web Link</span>
         </div>
+        </div>
       </div>
       <FileManager />
       <AppStore />
       <Settings />
+      </div>
     </div>
   );
 }

@@ -1,15 +1,12 @@
 .home-screen {
   padding-top: 56px;
   padding-bottom: 58px;
-  height: 100vh;
+  min-height: 100vh;
   background: 
     radial-gradient(1200px 800px at 25% 15%, rgba(167, 199, 231, 0.08), transparent),
     radial-gradient(1000px 600px at 75% 85%, rgba(230, 215, 255, 0.06), transparent),
     linear-gradient(135deg, #f8fafc 0%, #e2e8f0 40%, #f1f5f9 100%);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-wrap: wrap;
+  display: block;
   overflow: auto;
   position: relative;
 }
@@ -37,12 +34,30 @@
   }
 }
 
+.dashboard-grid { 
+  display: grid; 
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px; 
+  padding: 16px 20px; 
+  align-items: start;
+}
+
+.panel { 
+  background: var(--bg-panel);
+  border: 1px solid rgba(167, 199, 231, 0.2);
+  border-radius: var(--border-radius-large);
+  box-shadow: var(--shadow-soft), var(--glow-primary);
+  backdrop-filter: blur(20px) saturate(180%);
+}
+
+.shortcuts-panel { padding: 16px; }
+
 .shortcuts {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
-  padding: 30px 20px;
+  padding: 8px;
   gap: 8px;
 }
 
@@ -51,7 +66,7 @@
   height: 110px;
   background: var(--bg-glass);
   border-radius: var(--border-radius-large);
-  margin: 12px;
+  margin: 8px;
   display: flex;
   flex-direction: column;
   justify-content: center;
