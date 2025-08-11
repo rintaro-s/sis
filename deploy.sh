@@ -27,12 +27,14 @@ mkdir -p "$PKG_DIR/usr/share/applications"
 mkdir -p "$PKG_DIR/usr/share/icons/hicolor/256x256/apps"
 mkdir -p "$PKG_DIR/etc/xdg/autostart"
 
-echo "[2/4] Build Tauri app (release)"
+echo "[2/4] Build frontend & Tauri app (release)"
+# 1. フロントエンド（Vite/React）
 pushd "$UI_DIR" >/dev/null
-	# Node deps / build
 	npm ci
 	npm run build
-	# Tauri build (Linux向け)
+popd >/dev/null
+# 2. バックエンド（Rust/Tauri）
+pushd "$UI_DIR/src-tauri" >/dev/null
 	npx tauri build --target x86_64-unknown-linux-gnu
 popd >/dev/null
 
