@@ -20,10 +20,13 @@ sudo apt-get install -y \
     alsa-utils \
     brightnessctl \
     network-manager \
-    bluez
+    bluez \
+    playerctl \
+    gnome-screenshot \
+    xdg-utils
 
 # --- Python Library Installation ---
 echo "Installing required Python libraries via pip..."
-pip3 install requests xmltodict raylib raygui tauri
+pip3 install -q requests xmltodict raylib raygui tauri
 
 echo "--- Dependency installation complete. ---"

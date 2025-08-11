@@ -11,22 +11,29 @@ import './App.css';
 
 function App() {
   const [isMenuVisible, setIsMenuVisible] = useState(false);
-  const [hudHeld, setHudHeld] = useState(false);
+  const [hudOpen, setHudOpen] = useState(false);
 
   useEffect(() => {
     const unlisten = listen('super_key_pressed', async () => {
       setIsMenuVisible(prev => !prev);
     });
 
-    // フォールバック: Alt+Space で開閉（ブラウザ/開発時）
+    // Alt+Space でランチャー（フォールバック）
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey && e.code === 'Space') {
         e.preventDefault();
         setIsMenuVisible((p) => !p);
       }
+      // Ctrl+K で Halo HUD トグル
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setHudOpen((v) => !v);
+      }
+      // Esc でHUD/メニューを閉じる
       // Escで閉じる
       if (e.code === 'Escape') {
         setIsMenuVisible(false);
+        setHudOpen(false);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -41,32 +48,13 @@ function App() {
     setIsMenuVisible(false);
   };
 
-  // 長押し（Space + Super など）の簡易実装: Space押下中はHUD表示
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if ((e.code === 'Space' && (e.ctrlKey || e.metaKey || e.altKey)) || e.code === 'CapsLock') {
-        setHudHeld(true);
-      }
-    };
-    const up = (e: KeyboardEvent) => {
-      if (e.code === 'Space' || e.code === 'CapsLock') {
-        setHudHeld(false);
-      }
-    };
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup', up);
-    return () => {
-      window.removeEventListener('keydown', down);
-      window.removeEventListener('keyup', up);
-    };
-  }, []);
 
   return (
     <div className="app">
       <TopBar />
       <HomeScreen />
-      <BottomBar />
-  <HaloHud visible={hudHeld} />
+  <BottomBar />
+  <HaloHud visible={hudOpen} />
   <CommandPalette />
       <CircularMenu 
         isVisible={isMenuVisible} 

@@ -89,7 +89,7 @@
 - 夜間は自動で読書灯になる
 - ダウンロード元のリンクと、ファイルをちょっと確認して、AIが簡易的な気休めのウイルスチェック
 - 災害時の警告通知。通知バーに通知が行く。（誤報だった場合きまづいので通常の通知として行う。）
-- superボタン(windwosボタン)が押されると、カーソルの近くに塩が表示されて、そこで音量や最近開いたアプリ、お気に入りのアプリ、音楽の管理、マイク機能のon・off等ができる。
+- superボタン(windwosボタン)が押されると、カーソルの近くに円が表示されて、そこで音量や最近開いたアプリ、お気に入りのアプリ、音楽の管理、マイク機能のon・off等ができる。(Hello UHD)
 
 ---
 ## システム的な
@@ -109,14 +109,15 @@
 - **LLM**：gemma-3-12b-it-GGUF(Q5_K_M)/gemma-3-4b-it-GGUF(Q5_K_M)/Qwen3-14B-GGUF(Q4_k_m)＋ RAG ＋ agent機能
 - **SQLite**：UI設定・履歴保存
 - 災害情報取得の方法はsaigai.py参照
+- 安定性のため、Xfceをベースに開発。
 
 ---
 
 ## 操作方法（新体験）
 
 - Alt+Space: 円形ランチャーを開閉
-- Ctrl(またはAlt)+Space 長押し: Halo HUD（カーソル位置に円形ヘルプ）を表示
-- Ctrl+K: コマンドパレットを開く（アクション・アプリ検索）
+- Ctrl+K: Halo HUD をトグル（カーソル位置に円形ヘルプ）
+- Ctrl+P: コマンドパレットを開く（アクション・アプリ検索）
 - 下部バー: 入力欄に質問/指示をそのまま入力、🎤は長押しでプッシュトゥトーク（UIのみ）
 
 ## Raylibオーバーレイ（任意・実験的）
@@ -135,3 +136,47 @@ cargo tauri build --features overlay_raylib
 アプリ起動後は Ctrl+K →「Raylibオーバーレイ 切替」で起動/停止できます。
 
 注意: Windowsではビルド要件が増えます。未有効時はAPIは安全に失敗します。
+
+---
+
+## シンプルDEとして動かす（Xfce連携 + .deb パッケージ）
+
+前提: Ubuntu 22.04+ または互換環境（Xorg/Xfwm4 推奨）
+
+1) 依存関係のインストール（自動化）
+
+sudo権限で以下を実行:
+
+```
+./package_install.sh
+```
+
+2) ビルドと .deb 生成
+
+```
+cd sis-ui
+npm ci
+npm run build
+cd ..
+./deploy.sh
+```
+
+完了後、build/ 以下に sis-ui_0.1.0_amd64.deb ができます。
+
+3) インストールと自動起動設定
+
+```
+sudo apt install ./build/sis-ui_0.1.0_amd64.deb
+```
+
+postinst で /etc/xdg/autostart/sis-ui.desktop を配置します。Xfce セッションでログインすると自動起動します。手動起動は「SIS UI」アプリから可能です。
+
+4) 便利なバックエンドAPI（簡易）
+
+- 音量: pactl backend（set_volume）
+- 輝度: brightnessctl/xbacklight fallback（set_brightness）
+- アプリ起動: .desktop 由来の Exec を実行（launch_app）
+- スクショ: gnome-screenshot（take_screenshot）
+- 音楽: playerctl（play_pause/next/prev）
+
+これらは Command Palette からも呼び出せます。

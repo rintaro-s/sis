@@ -63,9 +63,9 @@ export const api = {
     } catch {
       await delay(150)
       return [
-        { name: 'ブラウザ' },
-        { name: 'ターミナル' },
-        { name: '設定' },
+  { name: 'ブラウザ', exec: 'xdg-open https://example.com' },
+  { name: 'ターミナル', exec: 'xfce4-terminal' },
+  { name: '設定', exec: 'xfce4-settings-manager' },
       ]
     }
   },
@@ -149,6 +149,24 @@ export const api = {
     } catch {
       await delay(200)
       return { ok: true, path: filePath }
+    }
+  },
+
+  async setBrightness(percent: number): Promise<{ ok: boolean; message?: string }> {
+    try {
+      const msg = await safeInvoke<string>('set_brightness', { percent: Math.max(0, Math.min(100, Math.floor(percent))) })
+      return { ok: true, message: msg }
+    } catch (e) {
+      return { ok: false, message: (e as Error)?.message }
+    }
+  },
+
+  async launchApp(exec: string): Promise<{ ok: boolean; message?: string }> {
+    try {
+      const msg = await safeInvoke<string>('launch_app', { exec })
+      return { ok: true, message: msg }
+    } catch (e) {
+      return { ok: false, message: (e as Error)?.message }
     }
   },
 

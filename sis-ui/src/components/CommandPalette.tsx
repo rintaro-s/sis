@@ -5,12 +5,12 @@ import { api } from '../services/api'
 export default function CommandPalette() {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
-  const [apps, setApps] = useState<{ name: string }[]>([])
+  const [apps, setApps] = useState<{ name: string; exec?: string }[]>([])
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
         e.preventDefault()
         setOpen((v) => !v)
         setTimeout(() => inputRef.current?.focus(), 0)
@@ -34,7 +34,7 @@ export default function CommandPalette() {
       { id: 'overlay-toggle', label: 'Raylibオーバーレイ 切替' },
       { id: 'settings', label: '設定を開く' },
     ]
-    const appItems = apps.map((a) => ({ id: `app:${a.name}`, label: `起動: ${a.name}` }))
+  const appItems = apps.map((a) => ({ id: `app:${a.name}`, label: `起動: ${a.name}` }))
     return [...staticItems, ...appItems].filter((it) => it.label.toLowerCase().includes(q.toLowerCase()))
   }, [q, apps])
 
@@ -47,7 +47,11 @@ export default function CommandPalette() {
       else await api.overlayStart()
     }
     if (id.startsWith('app:')) {
-      console.log('launch app', id.slice(4))
+      const name = id.slice(4)
+      const app = apps.find((a) => a.name === name)
+      if (app?.exec) {
+        await api.launchApp(app.exec)
+      }
     }
     setOpen(false)
   }
@@ -60,7 +64,7 @@ export default function CommandPalette() {
         <input
           ref={inputRef}
           className="palette-input"
-          placeholder="探す/指示する（Ctrl+Kで開閉）"
+          placeholder="探す/指示する（Ctrl+Pで開閉）"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />

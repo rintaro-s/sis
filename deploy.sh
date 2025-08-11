@@ -25,6 +25,7 @@ mkdir -p "$PKG_DIR/usr/bin"
 mkdir -p "$PKG_DIR/opt/$APP_ID"
 mkdir -p "$PKG_DIR/usr/share/applications"
 mkdir -p "$PKG_DIR/usr/share/icons/hicolor/256x256/apps"
+mkdir -p "$PKG_DIR/etc/xdg/autostart"
 
 echo "[2/4] Build Tauri app (release)"
 pushd "$UI_DIR" >/dev/null
@@ -85,8 +86,31 @@ Priority: optional
 Architecture: $ARCH
 Maintainer: $MAINTAINER
 Description: $DESCRIPTION
-Depends: libc6 (>= 2.31)
+Depends: libc6 (>= 2.31), xfwm4, picom, python3, python3-pip, python3-psutil, alsa-utils, brightnessctl, network-manager, bluez, playerctl, gnome-screenshot, xdg-utils
 EOF
+
+# postinst: ensure pip libs (best-effort) and autostart entry
+cat > "$PKG_DIR/DEBIAN/postinst" <<'EOF'
+#!/bin/sh
+set -e
+# Install helpful pip packages silently (best-effort)
+if command -v pip3 >/dev/null 2>&1; then
+	pip3 install -q --user requests xmltodict raylib raygui tauri || true
+fi
+# Create Xfce autostart entry
+install -d -m 0755 /etc/xdg/autostart
+cat > /etc/xdg/autostart/sis-ui.desktop <<EOT
+[Desktop Entry]
+Type=Application
+Name=SIS UI (Autostart)
+Exec=$APP_ID
+X-GNOME-Autostart-enabled=true
+OnlyShowIn=XFCE;
+NoDisplay=false
+EOT
+exit 0
+EOF
+chmod 0755 "$PKG_DIR/DEBIAN/postinst"
 
 dpkg-deb --build "$PKG_DIR"
 echo "OK: $(realpath "$PKG_DIR.deb")"

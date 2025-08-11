@@ -3,7 +3,7 @@
 use sysinfo::{System, SystemExt, CpuExt, NetworkExt, NetworksExt};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::fs;
 use mime_guess;
 use tauri::Manager;
@@ -17,6 +17,9 @@ struct NetworkStats {
     last_transmitted_bytes: u64,
     last_update_time: Instant,
 }
+
+// Global overlay running flag
+static OVERLAY_RUNNING: AtomicBool = AtomicBool::new(false);
 
 #[tauri::command]
 fn get_system_info(system: tauri::State<System>, network_stats: tauri::State<Arc<Mutex<NetworkStats>>>) -> String {
@@ -67,30 +70,30 @@ fn organize_file(file_path: String) -> Result<String, String> {
     }
 
     let mime_type = mime_guess::from_path(path).first_or_octet_stream();
-    let mut target_dir = Path::new("/home/rinta/Downloads/Others").to_path_buf(); // Default to Others
+    // Resolve user directories under $HOME with sensible defaults
+    let home = dirs::home_dir().ok_or_else(|| "cannot-detect-home".to_string())?;
+    let mut target_dir: PathBuf = home.join("Downloads").join("Others"); // Default to Others
 
     if mime_type.type_() == "image" {
-        target_dir = Path::new("/home/rinta/Images").to_path_buf();
+        target_dir = home.join("Pictures");
     } else if mime_type.type_() == "video" {
-        target_dir = Path::new("/home/rinta/Videos").to_path_buf();
+        target_dir = home.join("Videos");
     } else if mime_type.type_() == "audio" {
-        target_dir = Path::new("/home/rinta/Music").to_path_buf();
+        target_dir = home.join("Music");
     } else if mime_type.type_() == "text" || mime_type.subtype() == "pdf" {
-        target_dir = Path::new("/home/rinta/Documents").to_path_buf();
+        target_dir = home.join("Documents");
     } else if mime_type.type_() == "application" && (mime_type.subtype() == "zip" || mime_type.subtype() == "x-tar" || mime_type.subtype() == "x-rar-compressed") {
-        target_dir = Path::new("/home/rinta/Archives").to_path_buf();
+        target_dir = home.join("Archives");
     }
 
-    if !target_dir.exists() {
-        fs::create_dir_all(&target_dir).map_err(|e| format!("Failed to create directory {:?}: {{}}", target_dir, e))?;
-    }
+    if !target_dir.exists() { fs::create_dir_all(&target_dir).map_err(|e| format!("Failed to create directory {:?}: {}", target_dir, e))?; }
 
     let file_name = path.file_name().ok_or("Invalid file name")?;
     let dest_path = target_dir.join(file_name);
 
-    fs::rename(path, &dest_path).map_err(|e| format!("Failed to move file from {} to {:?}: {{}}", file_path, dest_path, e))?;
+    fs::rename(path, &dest_path).map_err(|e| format!("Failed to move file from {} to {:?}: {}", file_path, dest_path, e))?;
 
-    Ok(format!("File {} organized to {{:?}}", file_path, dest_path))
+    Ok(format!("File {} organized to {:?}", file_path, dest_path))
 }
 
 #[tauri::command]
@@ -109,7 +112,7 @@ fn set_volume(volume: u32) -> Result<String, String> {
                 Err(format!("Failed to set volume: {}", String::from_utf8_lossy(&output.stderr)))
             }
         }
-        Err(e) => Err(format!("Failed to execute pactl: {{}}", e)),
+    Err(e) => Err(format!("Failed to execute pactl: {}", e)),
     }
 }
 
@@ -122,17 +125,18 @@ struct AppInfo {
 #[tauri::command]
 fn get_recent_apps() -> Result<Vec<AppInfo>, String> {
     let mut apps = Vec::new();
-    let app_dirs = [
-        "/usr/share/applications",
-        "/usr/local/share/applications",
-        "/home/rinta/.local/share/applications", // User-specific applications
+    let mut app_dirs: Vec<PathBuf> = vec![
+        PathBuf::from("/usr/share/applications"),
+        PathBuf::from("/usr/local/share/applications"),
     ];
+    if let Some(home) = dirs::home_dir() {
+        app_dirs.push(home.join(".local/share/applications"));
+    }
 
-    for dir_path in app_dirs.iter() {
-        let path = Path::new(dir_path);
+    for path in app_dirs.iter() {
         if path.exists() && path.is_dir() {
-            for entry in fs::read_dir(path).map_err(|e| format!("Failed to read directory {:?}: {{}}", path, e))? {
-                let entry = entry.map_err(|e| format!("Failed to read directory entry: {{}}", e))?;
+            for entry in fs::read_dir(path).map_err(|e| format!("Failed to read directory {:?}: {}", path, e))? {
+                let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
                 let path = entry.path();
                 if path.is_file() && path.extension().map_or(false, |ext| ext == "desktop") {
                     if let Ok(content) = fs::read_to_string(&path) {
@@ -140,10 +144,14 @@ fn get_recent_apps() -> Result<Vec<AppInfo>, String> {
                             .find(|line| line.starts_with("Name="))
                             .and_then(|line| line.strip_prefix("Name="))
                             .unwrap_or("Unknown").to_string();
-                        let exec = content.lines()
+                        let mut exec = content.lines()
                             .find(|line| line.starts_with("Exec="))
                             .and_then(|line| line.strip_prefix("Exec="))
                             .unwrap_or("").to_string();
+                        // Strip desktop entry field codes like %U, %u, %f, %F etc.
+                        for code in ["%U", "%u", "%F", "%f", "%i", "%c", "%k"].iter() {
+                            exec = exec.replace(code, "");
+                        }
                         
                         if !name.is_empty() && !exec.is_empty() {
                             apps.push(AppInfo { name, exec });
@@ -160,8 +168,8 @@ fn get_recent_apps() -> Result<Vec<AppInfo>, String> {
 fn get_favorite_apps(app_handle: tauri::AppHandle) -> Result<Vec<AppInfo>, String> {
     let path = app_handle.path_resolver().app_data_dir().unwrap().join("favorites.json");
     if path.exists() {
-        let content = fs::read_to_string(&path).map_err(|e| format!("Failed to read favorites.json: {{}}", e))?;
-        let apps: Vec<AppInfo> = serde_json::from_str(&content).map_err(|e| format!("Failed to parse favorites.json: {{}}", e))?;
+    let content = fs::read_to_string(&path).map_err(|e| format!("Failed to read favorites.json: {}", e))?;
+    let apps: Vec<AppInfo> = serde_json::from_str(&content).map_err(|e| format!("Failed to parse favorites.json: {}", e))?;
         Ok(apps)
     } else {
         Ok(Vec::new())
@@ -175,8 +183,8 @@ fn add_favorite_app(app_handle: tauri::AppHandle, app: AppInfo) -> Result<String
 
     if !apps.iter().any(|a| a.name == app.name) {
         apps.push(app);
-        let content = serde_json::to_string_pretty(&apps).map_err(|e| format!("Failed to serialize favorites: {{}}", e))?;
-        fs::write(&path, content).map_err(|e| format!("Failed to write favorites.json: {{}}", e))?;
+    let content = serde_json::to_string_pretty(&apps).map_err(|e| format!("Failed to serialize favorites: {}", e))?;
+    fs::write(&path, content).map_err(|e| format!("Failed to write favorites.json: {}", e))?;
         Ok("App added to favorites".to_string())
     } else {
         Err("App already in favorites".to_string())
@@ -192,8 +200,8 @@ fn remove_favorite_app(app_handle: tauri::AppHandle, app_name: String) -> Result
     apps.retain(|app| app.name != app_name);
 
     if apps.len() < initial_len {
-        let content = serde_json::to_string_pretty(&apps).map_err(|e| format!("Failed to serialize favorites: {{}}", e))?;
-        fs::write(&path, content).map_err(|e| format!("Failed to write favorites.json: {{}}", e))?;
+    let content = serde_json::to_string_pretty(&apps).map_err(|e| format!("Failed to serialize favorites: {}", e))?;
+    fs::write(&path, content).map_err(|e| format!("Failed to write favorites.json: {}", e))?;
         Ok("App removed from favorites".to_string())
     } else {
         Err("App not found in favorites".to_string())
@@ -214,7 +222,7 @@ fn take_screenshot() -> Result<String, String> {
                 Err(format!("Failed to take screenshot: {}", String::from_utf8_lossy(&output.stderr)))
             }
         }
-        Err(e) => Err(format!("Failed to execute gnome-screenshot: {}", e)),
+    Err(e) => Err(format!("Failed to execute gnome-screenshot: {}", e)),
     }
 }
 
@@ -229,7 +237,7 @@ fn play_pause_music() -> Result<String, String> {
                 Err(format!("Failed to toggle play/pause: {}", String::from_utf8_lossy(&output.stderr)))
             }
         }
-        Err(e) => Err(format!("Failed to execute playerctl: {}", e)),
+    Err(e) => Err(format!("Failed to execute playerctl: {}", e)),
     }
 }
 
@@ -244,7 +252,7 @@ fn next_track() -> Result<String, String> {
                 Err(format!("Failed to go to next track: {}", String::from_utf8_lossy(&output.stderr)))
             }
         }
-        Err(e) => Err(format!("Failed to execute playerctl: {}", e)),
+    Err(e) => Err(format!("Failed to execute playerctl: {}", e)),
     }
 }
 
@@ -263,6 +271,52 @@ fn previous_track() -> Result<String, String> {
     }
 }
 
+#[tauri::command]
+fn set_brightness(percent: u32) -> Result<String, String> {
+    let clamped = if percent > 100 { 100 } else { percent };
+    // Try brightnessctl first
+    let out = Command::new("brightnessctl")
+        .arg("set")
+        .arg(format!("{}%", clamped))
+        .output();
+    match out {
+        Ok(o) => {
+            if o.status.success() {
+                return Ok(format!("Brightness set to {}%", clamped));
+            }
+        }
+        Err(_) => {}
+    }
+    // Fallback to xbacklight if available
+    let out2 = Command::new("xbacklight")
+        .arg("-set")
+        .arg(format!("{}", clamped))
+        .output();
+    match out2 {
+        Ok(o) => {
+            if o.status.success() { Ok(format!("Brightness set to {}% (xbacklight)", clamped)) } else { Err(String::from_utf8_lossy(&o.stderr).to_string()) }
+        }
+        Err(e) => Err(format!("Failed to set brightness: {}", e)),
+    }
+}
+
+#[tauri::command]
+fn launch_app(exec: String) -> Result<String, String> {
+    if exec.trim().is_empty() {
+        return Err("empty-exec".into());
+    }
+    // Strip desktop entry codes just in case
+    let mut cmdline = exec.clone();
+    for code in ["%U", "%u", "%F", "%f", "%i", "%c", "%k"].iter() {
+        cmdline = cmdline.replace(code, "");
+    }
+    // Run via shell to support quoted args; spawn and detach
+    match Command::new("sh").arg("-c").arg(cmdline).spawn() {
+        Ok(_child) => Ok("launched".into()),
+        Err(e) => Err(format!("failed-to-launch: {}", e)),
+    }
+}
+
 fn main() {
     let system = System::new_all();
     let network_stats = Arc::new(Mutex::new(NetworkStats {
@@ -270,8 +324,6 @@ fn main() {
         last_transmitted_bytes: 0,
         last_update_time: Instant::now(),
     }));
-
-    static OVERLAY_RUNNING: AtomicBool = AtomicBool::new(false);
 
     tauri::Builder::default()
         .manage(system)
@@ -291,6 +343,7 @@ fn main() {
             get_system_info,
             organize_file,
             set_volume,
+            set_brightness,
             get_recent_apps,
             get_favorite_apps,
             add_favorite_app,
@@ -299,6 +352,7 @@ fn main() {
             play_pause_music,
             next_track,
             previous_track,
+            launch_app,
             overlay_start,
             overlay_stop,
             overlay_status

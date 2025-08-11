@@ -28,6 +28,7 @@ notify = "6"
 mime_guess = "2"
 tauri-plugin-global-shortcut = "2"
 cfg-if = "1"
+dirs = "5"
 
 [features]
 default = []

@@ -23,7 +23,7 @@ function BottomBar() {
           className="chat-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Alt+Space でランチャー / Ctrl+Space ホールドで Halo HUD / ここに質問や指示もOK"
+          placeholder="Alt+Space ランチャー / Ctrl+K Halo HUD / Ctrl+P コマンドパレット"
         />
         <span className="cursor-blink"></span>
       </form>

@@ -6,9 +6,10 @@ type Props = { visible: boolean }
 // Halo HUD: キーホールド中だけ出現する円形ヘルプ/ショートカットHUD
 export default function HaloHud({ visible }: Props) {
   const [hint, setHint] = useState('')
-  const [pos, setPos] = useState<{x:number;y:number}>({ x: window.innerWidth/2, y: window.innerHeight/2 })
-  const startRef = useRef<{x:number;y:number}|null>(null)
-  const selectedRef = useRef<string| null>(null)
+  const [pos, setPos] = useState<{ x: number; y: number }>({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
+  const lastMouseRef = useRef<{ x: number; y: number }>({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
+  const startRef = useRef<{ x: number; y: number } | null>(null)
+  const selectedRef = useRef<string | null>(null)
   const rafRef = useRef<number | null>(null)
   const ringRef = useRef<HTMLDivElement | null>(null)
 
@@ -28,53 +29,45 @@ export default function HaloHud({ visible }: Props) {
     }
   }, [visible])
 
+  // 表示開始/終了時のロジック: 表示時にマウス位置を固定し、非表示時に選択確定
   useEffect(() => {
-    const onDown = (e: MouseEvent) => {
-      startRef.current = { x: e.clientX, y: e.clientY }
+    if (visible) {
+      // 表示時: 現在のマウス位置をHUDの中心に
+      const p = lastMouseRef.current
+      setPos(p)
+      setHint('')
+      startRef.current = p
       selectedRef.current = null
-    }
-    const onMove = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null
-      if (!target) return
-      const k = target.getAttribute('data-hint')
-      setHint(k ?? '')
-      setPos({ x: e.clientX, y: e.clientY })
-      // 方向ジェスチャー（デッドゾーン15px）
-      if (startRef.current) {
-        const dx = e.clientX - startRef.current.x
-        const dy = e.clientY - startRef.current.y
-        const dist = Math.hypot(dx, dy)
-        const dead = 24 // ごタップ防止: ある程度傾けないと判定しない
-        if (dist > dead) {
-          const angle = Math.atan2(dy, dx) // -PI..PI, 右を0
-          // 6方向に量子化（0,60,120,180,240,300 度相当）
-          const sector = Math.round(((angle + Math.PI) / (2*Math.PI)) * 6) % 6
-          const map = ['launcher','files','music','volume','screen','control']
-          selectedRef.current = map[sector]
-        } else {
-          selectedRef.current = null
+      // マウスの動きを追跡
+      const onMove = (e: MouseEvent) => {
+        lastMouseRef.current = { x: e.clientX, y: e.clientY }
+        const k = (e.target as HTMLElement)?.getAttribute('data-hint')
+        setHint(k ?? '')
+        if (startRef.current) {
+          const dx = e.clientX - startRef.current.x
+          const dy = e.clientY - startRef.current.y
+          const dist = Math.hypot(dx, dy)
+          const dead = 24
+          if (dist > dead) {
+            const angle = Math.atan2(dy, dx)
+            const sector = Math.round(((angle + Math.PI) / (2 * Math.PI)) * 6) % 6
+            const map = ['launcher', 'files', 'music', 'volume', 'screen', 'control']
+            selectedRef.current = map[sector]
+          } else {
+            selectedRef.current = null
+          }
         }
       }
-    }
-    const onUp = () => {
-      // 選択が確定していればアクション実行
-      // 実際の処理はApp側/コマンドパレットやAPIと接続可能
-      // ここではイベントをconsoleに出す
-      if (selectedRef.current) {
-        console.log('Halo select:', selectedRef.current)
+      window.addEventListener('mousemove', onMove)
+      return () => {
+        window.removeEventListener('mousemove', onMove)
+        // 表示終了時: 選択を確定
+        if (selectedRef.current) console.log('Halo select:', selectedRef.current)
+        startRef.current = null
+        selectedRef.current = null
       }
-      startRef.current = null
-      selectedRef.current = null
     }
-    window.addEventListener('mousedown', onDown)
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    return () => {
-      window.removeEventListener('mousedown', onDown)
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-  }, [])
+  }, [visible])
 
   if (!visible) return null
 
