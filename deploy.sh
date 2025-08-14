@@ -34,12 +34,9 @@ pushd "$UI_DIR" >/dev/null
 	npm run build
 popd >/dev/null
 # 2. Rust/Tauri ビルド（Linux向け）
-# sis-ui ディレクトリに移動して Tauri CLI を実行
-# 2. Rust/Tauri ビルド（Linux向け）
-# sis-ui ディレクトリから npm スクリプト経由で Tauri CLI を実行
-pushd "$UI_DIR" >/dev/null
-	# Cargo.toml を src-tauri に指定してビルド
-	npx tauri build --manifest-path src-tauri/Cargo.toml --target x86_64-unknown-linux-gnu
+# sis-ui/src-tauri ディレクトリに移動して Tauri CLI を実行
+pushd "$UI_DIR/src-tauri" >/dev/null
+	npx tauri build -- --target x86_64-unknown-linux-gnu
 popd >/dev/null
 
 # 生成物の場所（Tauri v2, Vite構成の標準）
