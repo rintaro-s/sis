@@ -34,18 +34,30 @@ pushd "$UI_DIR" >/dev/null
 	npm run build
 popd >/dev/null
 # 2. Rust/Tauri ビルド（Linux向け）
-# sis-ui/src-tauri ディレクトリに移動して Tauri CLI を実行
-pushd "$UI_DIR/src-tauri" >/dev/null
-	npx tauri build -- --target x86_64-unknown-linux-gnu
+pushd "$UI_DIR" >/dev/null
+	npx tauri build --manifest-path src-tauri/Cargo.toml --target x86_64-unknown-linux-gnu
 popd >/dev/null
 
 # 生成物の場所（Tauri v2, Vite構成の標準）
 APP_OUT_DIR="$UI_DIR/src-tauri/target/x86_64-unknown-linux-gnu/release"
-BIN_PATH="$APP_OUT_DIR/sis-ui"
+# Cargo.toml の [package].name が実バイナリ名（本プロジェクトでは 'app'）
+BIN_PATH="$APP_OUT_DIR/app"
 RES_DIR="$APP_OUT_DIR/bundle/resources"
 
+# バイナリ名が異なる場合のフォールバック（例: productName が使われている構成）
 if [[ ! -f "$BIN_PATH" ]]; then
-	echo "Tauri binary not found: $BIN_PATH" >&2
+	if [[ -f "$APP_OUT_DIR/sis-ui" ]]; then
+		BIN_PATH="$APP_OUT_DIR/sis-ui"
+	else
+		# 最後の手段: release ディレクトリ内の実行可能ファイルを一つ選ぶ
+		CANDIDATE=$(find "$APP_OUT_DIR" -maxdepth 1 -type f -executable | head -n 1 || true)
+		if [[ -n "$CANDIDATE" ]]; then BIN_PATH="$CANDIDATE"; fi
+	fi
+fi
+
+if [[ ! -f "$BIN_PATH" ]]; then
+	echo "Tauri binary not found under $APP_OUT_DIR" >&2
+	ls -la "$APP_OUT_DIR" >&2 || true
 	exit 1
 fi
 

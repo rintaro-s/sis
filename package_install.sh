@@ -23,7 +23,8 @@ sudo apt-get install -y \
     bluez \
     playerctl \
     gnome-screenshot \
-    xdg-utils
+    xdg-utils \
+    libgtk-3-dev
 
 # --- Python Library Installation ---
 echo "Installing required Python libraries via pip..."

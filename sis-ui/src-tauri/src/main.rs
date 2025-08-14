@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::fs;
 use mime_guess;
 use tauri::Manager;
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use cfg_if::cfg_if;
 use std::process::Command;
@@ -331,12 +332,11 @@ fn main() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             let window = app.get_window("main").unwrap();
-            let shortcut_manager = app.global_shortcut_manager();
-
-            shortcut_manager.register("Super", move || {
-                window.emit("super_key_pressed", ()).unwrap();
-            }).unwrap();
-
+            // Tauri v2: use GlobalShortcutExt from the plugin
+            let gs = app.handle().global_shortcut();
+            let _ = gs.register("Super", move || {
+                let _ = window.emit("super_key_pressed", ());
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -357,7 +357,8 @@ fn main() {
             overlay_stop,
             overlay_status
         ])
-        .run(tauri::generate_context!().expect("error while running tauri application"));
+    .run(tauri::generate_context!())
+    .expect("error while running tauri application");
 }
 
 #[tauri::command]
