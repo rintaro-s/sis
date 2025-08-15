@@ -320,8 +320,8 @@ fn main() {
             // get window (webview) in a Tauri-compatible way
             // Prefer get_webview_window (returns Option<Window>), fallback to AppHandle.get_window if present
             let window = app.get_webview_window("main").or_else(|| {
-                // attempt to get via handle
-                app.handle().get_window("main")
+                // attempt to get via handle (use get_webview_window for AppHandle compatibility)
+                app.handle().get_webview_window("main")
             });
             let _window = window.expect("main window not found");
 
