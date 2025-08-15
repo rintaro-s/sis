@@ -23,14 +23,16 @@ struct NetworkStats {
 static OVERLAY_RUNNING: AtomicBool = AtomicBool::new(false);
 
 #[tauri::command]
-fn get_system_info(system: tauri::State<System>, _network_stats: tauri::State<Arc<Mutex<NetworkStats>>>) -> String {
-    let mut sys = system.inner().clone();
-    // refresh_all provides a safe snapshot across sysinfo versions
+fn get_system_info(_system: tauri::State<System>, _network_stats: tauri::State<Arc<Mutex<NetworkStats>>>) -> String {
+    // Create a fresh snapshot locally to avoid borrowing the managed System stored in state
+    let mut sys = sysinfo::System::new_all();
     sys.refresh_all();
 
     // sysinfo v0.36 uses global_cpu_usage()
     let cpu_usage = sys.global_cpu_usage();
-    let mem_usage = ((sys.used_memory() as f64 / sys.total_memory() as f64) * 100.0) as u64;
+    let mem_usage = if sys.total_memory() > 0 {
+        ((sys.used_memory() as f64 / sys.total_memory() as f64) * 100.0) as u64
+    } else { 0 };
 
     // Network speed calculation is environment specific and sysinfo API changed; return 0 for now
     let download_speed = 0u64;
@@ -315,12 +317,19 @@ fn main() {
         .manage(network_stats)
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
-            // get window (webview) in a Tauri-2-compatible way
-            let window = app.get_webview_window("main").or_else(|| app.get_window("main"));
-            let window = window.expect("main window not found");
+            // get window (webview) in a Tauri-compatible way
+            // Prefer get_webview_window (returns Option<Window>), fallback to AppHandle.get_window if present
+            let window = app.get_webview_window("main").or_else(|| {
+                // attempt to get via handle
+                app.handle().get_window("main")
+            });
+            let _window = window.expect("main window not found");
+
             // Tauri v2 global shortcut registration API takes only the shortcut string
             let gs = app.handle().global_shortcut();
-            let _ = gs.register("Super");
+            if let Err(e) = gs.register("Super") {
+                println!("warning: failed to register global shortcut: {:?}", e);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
