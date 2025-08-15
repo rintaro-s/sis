@@ -34,30 +34,56 @@ pushd "$UI_DIR" >/dev/null
 	npm run build
 popd >/dev/null
 # 2. Rust/Tauri ビルド（Linux向け）
+# Use cargo build --release directly to produce the binary and avoid tauri-bundler bundling step
+# If you need to cross-compile, set CROSS_TARGET (e.g. x86_64-unknown-linux-gnu) in the environment
 pushd "$UI_DIR" >/dev/null
-	npx tauri build --manifest-path src-tauri/Cargo.toml --target x86_64-unknown-linux-gnu
+if [[ -n "${CROSS_TARGET:-}" ]]; then
+	echo "Building for target $CROSS_TARGET"
+	cargo build --release --manifest-path src-tauri/Cargo.toml --target "$CROSS_TARGET"
+else
+	cargo build --release --manifest-path src-tauri/Cargo.toml
+fi
 popd >/dev/null
 
-# 生成物の場所（Tauri v2, Vite構成の標準）
-APP_OUT_DIR="$UI_DIR/src-tauri/target/x86_64-unknown-linux-gnu/release"
-# Cargo.toml の [package].name が実バイナリ名（本プロジェクトでは 'app'）
-BIN_PATH="$APP_OUT_DIR/app"
-RES_DIR="$APP_OUT_DIR/bundle/resources"
+# 生成物の場所: 複数の候補ディレクトリをチェックして、最初に見つかったバイナリを使う
+APP_OUT_CANDIDATES=(
+	"$UI_DIR/src-tauri/target/x86_64-unknown-linux-gnu/release"
+	"$UI_DIR/src-tauri/target/release"
+	"$UI_DIR/src-tauri/target/release/deps"
+)
 
-# バイナリ名が異なる場合のフォールバック（例: productName が使われている構成）
-if [[ ! -f "$BIN_PATH" ]]; then
-	if [[ -f "$APP_OUT_DIR/sis-ui" ]]; then
-		BIN_PATH="$APP_OUT_DIR/sis-ui"
-	else
-		# 最後の手段: release ディレクトリ内の実行可能ファイルを一つ選ぶ
-		CANDIDATE=$(find "$APP_OUT_DIR" -maxdepth 1 -type f -executable | head -n 1 || true)
-		if [[ -n "$CANDIDATE" ]]; then BIN_PATH="$CANDIDATE"; fi
+BIN_PATH=""
+RES_DIR=""
+for d in "${APP_OUT_CANDIDATES[@]}"; do
+	if [[ -d "$d" ]]; then
+		# Prefer named binaries
+		if [[ -f "$d/app" ]]; then
+			BIN_PATH="$d/app"
+			RES_DIR="$d/bundle/resources"
+			break
+		fi
+		if [[ -f "$d/sis-ui" ]]; then
+			BIN_PATH="$d/sis-ui"
+			RES_DIR="$d/bundle/resources"
+			break
+		fi
+
+		# Pick first executable regular file as fallback
+		CANDIDATE=$(find "$d" -maxdepth 1 -type f -perm /111 -print -quit || true)
+		if [[ -n "$CANDIDATE" ]]; then
+			BIN_PATH="$CANDIDATE"
+			RES_DIR="$d/bundle/resources"
+			break
+		fi
 	fi
-fi
+done
 
-if [[ ! -f "$BIN_PATH" ]]; then
-	echo "Tauri binary not found under $APP_OUT_DIR" >&2
-	ls -la "$APP_OUT_DIR" >&2 || true
+if [[ -z "$BIN_PATH" || ! -f "$BIN_PATH" ]]; then
+	echo "Tauri binary not found in any expected output directories:" >&2
+	for d in "${APP_OUT_CANDIDATES[@]}"; do
+		echo "--- $d ---" >&2
+		ls -la "$d" >&2 || true
+	done
 	exit 1
 fi
 
