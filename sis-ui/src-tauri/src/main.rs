@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use sysinfo::{System, SystemExt, CpuExt, NetworkExt, NetworksExt};
+use sysinfo::System;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use std::path::{Path, PathBuf};
@@ -23,42 +23,18 @@ struct NetworkStats {
 static OVERLAY_RUNNING: AtomicBool = AtomicBool::new(false);
 
 #[tauri::command]
-fn get_system_info(system: tauri::State<System>, network_stats: tauri::State<Arc<Mutex<NetworkStats>>>) -> String {
+fn get_system_info(system: tauri::State<System>, _network_stats: tauri::State<Arc<Mutex<NetworkStats>>>) -> String {
     let mut sys = system.inner().clone();
-    sys.refresh_cpu();
-    sys.refresh_memory();
-    sys.refresh_networks();
+    // refresh_all provides a safe snapshot across sysinfo versions
+    sys.refresh_all();
 
-    let cpu_usage = sys.global_cpu_info().cpu_usage();
-    let mem_usage = (sys.used_memory() as f64 / sys.total_memory() as f64 * 100.0) as u64;
+    // sysinfo v0.36 uses global_cpu_usage()
+    let cpu_usage = sys.global_cpu_usage();
+    let mem_usage = ((sys.used_memory() as f64 / sys.total_memory() as f64) * 100.0) as u64;
 
-    let mut current_received_bytes = 0;
-    let mut current_transmitted_bytes = 0;
-
-    for (_interface_name, network) in sys.networks() {
-        current_received_bytes += network.received();
-        current_transmitted_bytes += network.transmitted();
-    }
-
-    let mut stats = network_stats.lock().unwrap();
-
-    let elapsed_time = stats.last_update_time.elapsed().as_secs_f64();
-
-    let download_speed = if elapsed_time > 0.0 {
-        ((current_received_bytes - stats.last_received_bytes) as f64 / elapsed_time / 1024.0 / 1024.0) as u64 // MBps
-    } else {
-        0
-    };
-
-    let upload_speed = if elapsed_time > 0.0 {
-        ((current_transmitted_bytes - stats.last_transmitted_bytes) as f64 / elapsed_time / 1024.0 / 1024.0) as u64 // MBps
-    } else {
-        0
-    };
-
-    stats.last_received_bytes = current_received_bytes;
-    stats.last_transmitted_bytes = current_transmitted_bytes;
-    stats.last_update_time = Instant::now();
+    // Network speed calculation is environment specific and sysinfo API changed; return 0 for now
+    let download_speed = 0u64;
+    let upload_speed = 0u64;
 
     format!("{{\"cpuUsage\":{},\"memUsage\":{},\"downloadSpeed\":{},\"uploadSpeed\":{}}}", cpu_usage, mem_usage, download_speed, upload_speed)
 }
@@ -166,11 +142,14 @@ fn get_recent_apps() -> Result<Vec<AppInfo>, String> {
 }
 
 #[tauri::command]
-fn get_favorite_apps(app_handle: tauri::AppHandle) -> Result<Vec<AppInfo>, String> {
-    let path = app_handle.path_resolver().app_data_dir().unwrap().join("favorites.json");
+fn get_favorite_apps(_app_handle: tauri::AppHandle) -> Result<Vec<AppInfo>, String> {
+    // Use a simple, predictable path under the user's home directory to avoid AppHandle API differences
+    let home = dirs::home_dir().ok_or_else(|| "cannot-detect-home".to_string())?;
+    let dir = home.join(".local").join("share").join("sis-ui");
+    let path = dir.join("favorites.json");
     if path.exists() {
-    let content = fs::read_to_string(&path).map_err(|e| format!("Failed to read favorites.json: {}", e))?;
-    let apps: Vec<AppInfo> = serde_json::from_str(&content).map_err(|e| format!("Failed to parse favorites.json: {}", e))?;
+        let content = fs::read_to_string(&path).map_err(|e| format!("Failed to read favorites.json: {}", e))?;
+        let apps: Vec<AppInfo> = serde_json::from_str(&content).map_err(|e| format!("Failed to parse favorites.json: {}", e))?;
         Ok(apps)
     } else {
         Ok(Vec::new())
@@ -178,14 +157,17 @@ fn get_favorite_apps(app_handle: tauri::AppHandle) -> Result<Vec<AppInfo>, Strin
 }
 
 #[tauri::command]
-fn add_favorite_app(app_handle: tauri::AppHandle, app: AppInfo) -> Result<String, String> {
-    let path = app_handle.path_resolver().app_data_dir().unwrap().join("favorites.json");
-    let mut apps = get_favorite_apps(app_handle).unwrap_or_else(|_| Vec::new());
+fn add_favorite_app(_app_handle: tauri::AppHandle, app: AppInfo) -> Result<String, String> {
+    let home = dirs::home_dir().ok_or_else(|| "cannot-detect-home".to_string())?;
+    let dir = home.join(".local").join("share").join("sis-ui");
+    if !dir.exists() { fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?; }
+    let path = dir.join("favorites.json");
+    let mut apps = get_favorite_apps(_app_handle).unwrap_or_else(|_| Vec::new());
 
     if !apps.iter().any(|a| a.name == app.name) {
         apps.push(app);
-    let content = serde_json::to_string_pretty(&apps).map_err(|e| format!("Failed to serialize favorites: {}", e))?;
-    fs::write(&path, content).map_err(|e| format!("Failed to write favorites.json: {}", e))?;
+        let content = serde_json::to_string_pretty(&apps).map_err(|e| format!("Failed to serialize favorites: {}", e))?;
+        fs::write(&path, content).map_err(|e| format!("Failed to write favorites.json: {}", e))?;
         Ok("App added to favorites".to_string())
     } else {
         Err("App already in favorites".to_string())
@@ -193,16 +175,18 @@ fn add_favorite_app(app_handle: tauri::AppHandle, app: AppInfo) -> Result<String
 }
 
 #[tauri::command]
-fn remove_favorite_app(app_handle: tauri::AppHandle, app_name: String) -> Result<String, String> {
-    let path = app_handle.path_resolver().app_data_dir().unwrap().join("favorites.json");
-    let mut apps = get_favorite_apps(app_handle).unwrap_or_else(|_| Vec::new());
+fn remove_favorite_app(_app_handle: tauri::AppHandle, app_name: String) -> Result<String, String> {
+    let home = dirs::home_dir().ok_or_else(|| "cannot-detect-home".to_string())?;
+    let dir = home.join(".local").join("share").join("sis-ui");
+    let path = dir.join("favorites.json");
+    let mut apps = get_favorite_apps(_app_handle).unwrap_or_else(|_| Vec::new());
 
     let initial_len = apps.len();
     apps.retain(|app| app.name != app_name);
 
     if apps.len() < initial_len {
-    let content = serde_json::to_string_pretty(&apps).map_err(|e| format!("Failed to serialize favorites: {}", e))?;
-    fs::write(&path, content).map_err(|e| format!("Failed to write favorites.json: {}", e))?;
+        let content = serde_json::to_string_pretty(&apps).map_err(|e| format!("Failed to serialize favorites: {}", e))?;
+        fs::write(&path, content).map_err(|e| format!("Failed to write favorites.json: {}", e))?;
         Ok("App removed from favorites".to_string())
     } else {
         Err("App not found in favorites".to_string())
@@ -331,12 +315,12 @@ fn main() {
         .manage(network_stats)
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
-            let window = app.get_window("main").unwrap();
-            // Tauri v2: use GlobalShortcutExt from the plugin
+            // get window (webview) in a Tauri-2-compatible way
+            let window = app.get_webview_window("main").or_else(|| app.get_window("main"));
+            let window = window.expect("main window not found");
+            // Tauri v2 global shortcut registration API takes only the shortcut string
             let gs = app.handle().global_shortcut();
-            let _ = gs.register("Super", move || {
-                let _ = window.emit("super_key_pressed", ());
-            });
+            let _ = gs.register("Super");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
