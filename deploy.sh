@@ -127,24 +127,21 @@ Priority: optional
 Architecture: $ARCH
 Maintainer: $MAINTAINER
 Description: $DESCRIPTION
-Depends: libc6 (>= 2.31), xfwm4, picom, python3, python3-pip, python3-psutil, alsa-utils, brightnessctl, network-manager, bluez, playerctl, gnome-screenshot, xdg-utils
+Depends: libc6 (>= 2.31), libgtk-3-0, libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37, xfwm4, picom, python3, python3-pip, python3-psutil, alsa-utils, brightnessctl, network-manager, bluez, playerctl, gnome-screenshot, xdg-utils
 EOF
 
 # postinst: ensure pip libs (best-effort) and autostart entry
 cat > "$PKG_DIR/DEBIAN/postinst" <<'EOF'
 #!/bin/sh
 set -e
-# Install helpful pip packages silently (best-effort)
-if command -v pip3 >/dev/null 2>&1; then
-	pip3 install -q --user requests xmltodict raylib raygui tauri || true
-fi
 # Create Xfce autostart entry
 install -d -m 0755 /etc/xdg/autostart
 cat > /etc/xdg/autostart/sis-ui.desktop <<EOT
 [Desktop Entry]
 Type=Application
 Name=SIS UI (Autostart)
-Exec=$APP_ID
+Exec=/usr/bin/sis-ui
+Icon=sis-ui
 X-GNOME-Autostart-enabled=true
 OnlyShowIn=XFCE;
 NoDisplay=false

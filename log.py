@@ -22,4 +22,4 @@ def receive_log():
 if __name__ == '__main__':
     # サーバーを起動
     # ホスト '0.0.0.0' は、外部からのアクセスを許可する設定
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    app.run(host='0.0.0.0', port=808, debug=True)
