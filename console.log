@@ -1,4 +1,10 @@
-[2025-08-16 21:13:03] Received log:
+Package libwebkit2gtk-4.0-37 has no installation candidate
+
+Installation successful:libgtk-3-0 libwebkit2gtk-4.1-0
+
+---
+[2025-08-16 21:49:02] Received log:
+
 WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
 
 Reading package lists...
@@ -19,26 +25,6 @@ Selecting previously unselected package sis-ui.
 Preparing to unpack .../build/sis-ui_0.1.0_amd64.deb ...
 Unpacking sis-ui (0.1.0) ...
 Setting up sis-ui (0.1.0) ...
-error: externally-managed-environment
-
-× This environment is externally managed
-╰─> To install Python packages system-wide, try apt install
-    python3-xyz, where xyz is the package you are trying to
-    install.
-
-    If you wish to install a non-Debian-packaged Python package,
-    create a virtual environment using python3 -m venv path/to/venv.
-    Then use path/to/venv/bin/python and path/to/venv/bin/pip. Make
-    sure you have python3-full installed.
-
-    If you wish to install a non-Debian packaged Python application,
-    it may be easiest to use pipx install xyz, which will manage a
-    virtual environment for you. Make sure you have pipx installed.
-
-    See /usr/share/doc/python3.12/README.venv for more information.
-
-note: If you believe this is a mistake, please contact your Python installation or OS distribution provider. You can override this, at the risk of breaking your Python installation or OS, by passing --break-system-packages.
-hint: See PEP 668 for the detailed specification.
 Processing triggers for desktop-file-utils (0.27-2build1) ...
 Processing triggers for hicolor-icon-theme (0.17-2) ...
 Processing triggers for gnome-menus (3.36.0-1.1ubuntu3) ...
@@ -56,7 +42,7 @@ No user sessions are running outdated binaries.
 No VM guests are running outdated hypervisor (qemu) binaries on this host.
 
 ---
-[2025-08-16 21:18:00] Received log:
+[2025-08-16 21:48:53] Received log:
 
 thread 'main' panicked at /home/rinta/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tao-0.34.0/src/platform_impl/linux/event_loop.rs:218:53:
 Failed to initialize gtk backend!: BoolError { message: "Failed to initialize GTK", filename: "/home/rinta/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gtk-0.18.2/src/rt.rs", function: "gtk::rt::init", line: 141 }

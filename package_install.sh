@@ -24,8 +24,9 @@ sudo apt-get install -y \
     playerctl \
     gnome-screenshot \
     xdg-utils \
-    libgtk-3-dev
-
+    libgtk-3-dev \
+    npm \
+    rustup
 # --- Python Library Installation ---
 echo "Installing required Python libraries via pip..."
 pip3 install -q requests xmltodict raylib raygui tauri
