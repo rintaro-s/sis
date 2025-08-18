@@ -55,7 +55,8 @@ body {
   -moz-osx-font-smoothing: grayscale;
   cursor: default;
   background: var(--bg-void);
-  overflow: hidden; 
+  overflow-x: hidden;
+  overflow-y: auto;
   color: var(--text-primary);
   font-weight: 400;
 }

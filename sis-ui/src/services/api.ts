@@ -12,6 +12,23 @@ function getTauriInvoke(): TauriInvoke | null {
   return v2 ?? v1 ?? null
 }
 
+let tauriReadyPromise: Promise<void> | null = null
+async function waitForTauri(timeoutMs = 3000): Promise<void> {
+  if (getTauriInvoke()) return
+  if (!tauriReadyPromise) {
+    tauriReadyPromise = new Promise<void>((resolve) => {
+      const start = Date.now()
+      const tick = () => {
+        if (getTauriInvoke()) return resolve()
+        if (Date.now() - start >= timeoutMs) return resolve()
+        setTimeout(tick, 50)
+      }
+      tick()
+    })
+  }
+  await tauriReadyPromise
+}
+
 export type SystemInfo = {
   cpuUsage: number
   memUsage: number
@@ -23,7 +40,11 @@ export type AppInfo = { name: string; exec?: string }
 
 
 async function safeInvoke<T = unknown>(cmd: string, payload?: Record<string, unknown>): Promise<T> {
-  const inv = getTauriInvoke()
+  let inv = getTauriInvoke()
+  if (!inv) {
+    await waitForTauri(3000)
+    inv = getTauriInvoke()
+  }
   if (!inv) throw new Error('invoke-unavailable')
   return inv<T>(cmd, payload)
 }

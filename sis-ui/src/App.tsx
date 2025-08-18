@@ -49,22 +49,28 @@ function App() {
   // Backend health check: ensure invoke available and handler responds
   useEffect(() => {
     let mounted = true;
-    (async () => {
+    const probe = async () => {
       try {
         const info = await api.getSystemInfo();
         if (!mounted) return;
         if (!info || typeof info.cpuUsage !== 'number') {
           setBackendError('バックエンドから不正な応答');
+        } else {
+          setBackendError(null);
         }
       } catch (e: any) {
         const msg = e?.message || String(e);
+        if (!mounted) return;
         if (msg === 'invoke-unavailable') {
           setBackendError('バックエンドに未接続（Tauriが無効）');
         } else {
           setBackendError(`バックエンドエラー: ${msg}`);
         }
+        // retry once after short delay in case __TAURI__ becomes available late
+        setTimeout(() => { if (mounted) probe(); }, 1200);
       }
-    })();
+    };
+    probe();
     return () => { mounted = false };
   }, []);
 
