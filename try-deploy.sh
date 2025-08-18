@@ -91,22 +91,34 @@ if [[ -z "$BIN_PATH" || ! -f "$BIN_PATH" ]]; then
 	exit 1
 fi
 
-echo "[3/5] Stage files"
-# 実行ファイルとリソース（アイコン等）
-install -m 0755 "$BIN_PATH" "$PKG_DIR/opt/$APP_ID/$APP_ID"
-if [[ -d "$RES_DIR" ]]; then
-	cp -a "$RES_DIR/." "$PKG_DIR/opt/$APP_ID/"
+echo "[3/5] Prefer Tauri-generated .deb if available"
+# Try to use Tauri bundler's .deb directly for correct resource wiring
+TAURI_DEB=""
+if [[ -d "$UI_DIR/src-tauri/target/debian" ]]; then
+	TAURI_DEB=$(ls -1t "$UI_DIR/src-tauri/target/debian"/*.deb 2>/dev/null | head -n1 || true)
 fi
 
+if [[ -n "$TAURI_DEB" && -f "$TAURI_DEB" ]]; then
+	echo "Found Tauri deb: $TAURI_DEB"
+	DEB_PATH="$TAURI_DEB"
+else
+	echo "No Tauri deb found. Staging custom package..."
+	echo "[3/5] Stage files"
+# 実行ファイルとリソース（アイコン等）
+	install -m 0755 "$BIN_PATH" "$PKG_DIR/opt/$APP_ID/$APP_ID"
+	if [[ -d "$RES_DIR" ]]; then
+			cp -a "$RES_DIR/." "$PKG_DIR/opt/$APP_ID/"
+	fi
+
 # 起動シェル（/usr/bin 下にエイリアス）
-cat > "$PKG_DIR/usr/bin/$APP_ID" <<'EOF'
+	cat > "$PKG_DIR/usr/bin/$APP_ID" <<'EOF'
 #!/usr/bin/env bash
 exec /opt/sis-ui/sis-ui "$@"
 EOF
-chmod +x "$PKG_DIR/usr/bin/$APP_ID"
+	chmod +x "$PKG_DIR/usr/bin/$APP_ID"
 
 # .desktop エントリ
-cat > "$PKG_DIR/usr/share/applications/$APP_ID.desktop" <<EOF
+	cat > "$PKG_DIR/usr/share/applications/$APP_ID.desktop" <<EOF
 [Desktop Entry]
 Name=$APP_NAME
 Exec=$APP_ID
@@ -117,13 +129,13 @@ Terminal=false
 EOF
 
 # アイコン配置（ビルド成果物 or リポジトリのPNGを利用）
-ICON_SRC="$UI_DIR/src-tauri/icons/128x128.png"
-if [[ -f "$ICON_SRC" ]]; then
-	install -m 0644 "$ICON_SRC" "$PKG_DIR/usr/share/icons/hicolor/256x256/apps/$APP_ID.png"
-fi
+	ICON_SRC="$UI_DIR/src-tauri/icons/128x128.png"
+	if [[ -f "$ICON_SRC" ]]; then
+			install -m 0644 "$ICON_SRC" "$PKG_DIR/usr/share/icons/hicolor/256x256/apps/$APP_ID.png"
+	fi
 
 echo "[4/5] Control file & build"
-cat > "$PKG_DIR/DEBIAN/control" <<EOF
+	cat > "$PKG_DIR/DEBIAN/control" <<EOF
 Package: $APP_ID
 Version: $VERSION
 Section: utils
@@ -135,7 +147,7 @@ Depends: libc6 (>= 2.31), libgtk-3-0, libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37
 EOF
 
 # postinst: ensure autostart entry
-cat > "$PKG_DIR/DEBIAN/postinst" <<'EOF'
+	cat > "$PKG_DIR/DEBIAN/postinst" <<'EOF'
 #!/bin/sh
 set -e
 # Create Xfce autostart entry
@@ -152,11 +164,12 @@ NoDisplay=false
 EOT
 exit 0
 EOF
-chmod 0755 "$PKG_DIR/DEBIAN/postinst"
+	chmod 0755 "$PKG_DIR/DEBIAN/postinst"
 
-dpkg-deb --build "$PKG_DIR"
-DEB_PATH="$(realpath "$PKG_DIR.deb")"
-echo "OK: $DEB_PATH"
+	dpkg-deb --build "$PKG_DIR"
+	DEB_PATH="$(realpath "$PKG_DIR.deb")"
+	echo "OK: $DEB_PATH"
+fi
 
 echo "[5/5] Install package"
 if [[ $EUID -ne 0 ]]; then SUDO=sudo; else SUDO=""; fi

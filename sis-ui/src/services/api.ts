@@ -2,7 +2,7 @@
 // 依存関係を避けるため静的importは使わず、ランタイム検出でinvokeを取得します。
 type TauriInvoke = <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>
 
-function getTauriInvoke(): TauriInvoke | null {
+function getTauriInvokeFromWindow(): TauriInvoke | null {
   const w = globalThis as Record<string, unknown>
   const tauri = w.__TAURI__ as
     | { core?: { invoke?: TauriInvoke }; tauri?: { invoke?: TauriInvoke } }
@@ -12,14 +12,33 @@ function getTauriInvoke(): TauriInvoke | null {
   return v2 ?? v1 ?? null
 }
 
+let cachedInvoke: TauriInvoke | null = null
+async function resolveInvoke(): Promise<TauriInvoke | null> {
+  if (cachedInvoke) return cachedInvoke
+  // Try official API first (Tauri v2 recommended)
+  try {
+    const mod = await import('@tauri-apps/api/core')
+    if (typeof mod.invoke === 'function') {
+      cachedInvoke = mod.invoke as TauriInvoke
+      return cachedInvoke
+    }
+  } catch {
+    // ignore
+  }
+  // Fallback to window.__TAURI__ injection
+  const w = getTauriInvokeFromWindow()
+  if (w) { cachedInvoke = w; return cachedInvoke }
+  return null
+}
+
 let tauriReadyPromise: Promise<void> | null = null
 async function waitForTauri(timeoutMs = 3000): Promise<void> {
-  if (getTauriInvoke()) return
+  if (getTauriInvokeFromWindow()) return
   if (!tauriReadyPromise) {
     tauriReadyPromise = new Promise<void>((resolve) => {
       const start = Date.now()
       const tick = () => {
-        if (getTauriInvoke()) return resolve()
+        if (getTauriInvokeFromWindow()) return resolve()
         if (Date.now() - start >= timeoutMs) return resolve()
         setTimeout(tick, 50)
       }
@@ -40,10 +59,10 @@ export type AppInfo = { name: string; exec?: string }
 
 
 async function safeInvoke<T = unknown>(cmd: string, payload?: Record<string, unknown>): Promise<T> {
-  let inv = getTauriInvoke()
+  let inv = await resolveInvoke()
   if (!inv) {
     await waitForTauri(3000)
-    inv = getTauriInvoke()
+    inv = await resolveInvoke()
   }
   if (!inv) throw new Error('invoke-unavailable')
   return inv<T>(cmd, payload)

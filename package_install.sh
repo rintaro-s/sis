@@ -29,6 +29,6 @@ sudo apt-get install -y \
     rustup
 # --- Python Library Installation ---
 echo "Installing required Python libraries via pip..."
-pip3 install -q requests xmltodict raylib raygui tauri
+echo "pip3 install -q requests xmltodict raylib raygui tauri"
 
 echo "--- Dependency installation complete. ---"
