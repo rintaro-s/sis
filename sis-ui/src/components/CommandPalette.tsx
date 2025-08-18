@@ -34,7 +34,7 @@ export default function CommandPalette() {
       { id: 'overlay-toggle', label: 'Raylibオーバーレイ 切替' },
       { id: 'settings', label: '設定を開く' },
     ]
-  const appItems = apps.map((a) => ({ id: `app:${a.name}`, label: `起動: ${a.name}` }))
+  const appItems = apps.filter((a) => a.exec && a.exec.trim() !== '').map((a) => ({ id: `app:${a.name}`, label: `起動: ${a.name}` }))
     return [...staticItems, ...appItems].filter((it) => it.label.toLowerCase().includes(q.toLowerCase()))
   }, [q, apps])
 

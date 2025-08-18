@@ -46,7 +46,7 @@ popd >/dev/null
 pushd "$UI_DIR" >/dev/null
 	command -v npx >/dev/null 2>&1 || die "npx not found. Please install Node.js/npm."
 	# Limit bundling to deb/rpm to avoid AppImage (linuxdeploy) issues; the binary is still produced under target/release
-	npx tauri build  --bundles deb,rpm -- --manifest-path ~/sis/sist-ui/src-tauri/Cargo.toml
+	npx tauri build  --bundles deb,rpm -- --manifest-path ~/sis/sis-ui/src-tauri/Cargo.toml
 popd >/dev/null
 
 # 生成物の場所: 複数の候補ディレクトリをチェックして、最初に見つかったバイナリを使う

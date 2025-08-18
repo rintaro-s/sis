@@ -134,8 +134,8 @@ function CircularMenu({ isVisible, onClose }: CircularMenuProps) {
           <div className="app-list-container">
             <h4>アプリケーション</h4>
             <ul>
-              {recentApps.length > 0 ? (
-                recentApps.map((app, index) => (
+              {recentApps.filter(a => a.exec && a.exec.trim() !== '').length > 0 ? (
+                recentApps.filter(a => a.exec && a.exec.trim() !== '').map((app, index) => (
                   <li key={index}>
                     {app.name}
                     <button

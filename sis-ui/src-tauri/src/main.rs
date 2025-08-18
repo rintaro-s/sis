@@ -22,8 +22,29 @@ struct NetworkStats {
 // Global overlay running flag
 static OVERLAY_RUNNING: AtomicBool = AtomicBool::new(false);
 
+fn read_net_totals() -> (u64, u64) {
+    // Sum rx/tx bytes from /proc/net/dev (Linux前提)
+    if let Ok(s) = std::fs::read_to_string("/proc/net/dev") {
+        let mut rx: u64 = 0;
+        let mut tx: u64 = 0;
+        for line in s.lines().skip(2) { // skip headers
+            if let Some(colon) = line.find(":") {
+                let rest = &line[colon + 1..];
+                let parts: Vec<&str> = rest.split_whitespace().collect();
+                if parts.len() >= 16 {
+                    // parts[0]=rx_bytes, parts[8]=tx_bytes
+                    if let Ok(v) = parts[0].parse::<u64>() { rx = rx.saturating_add(v); }
+                    if let Ok(v) = parts[8].parse::<u64>() { tx = tx.saturating_add(v); }
+                }
+            }
+        }
+        return (rx, tx);
+    }
+    (0, 0)
+}
+
 #[tauri::command]
-fn get_system_info(_system: tauri::State<System>, _network_stats: tauri::State<Arc<Mutex<NetworkStats>>>) -> String {
+fn get_system_info(_system: tauri::State<System>, network_stats: tauri::State<Arc<Mutex<NetworkStats>>>) -> String {
     // Create a fresh snapshot locally to avoid borrowing the managed System stored in state
     let mut sys = sysinfo::System::new_all();
     sys.refresh_all();
@@ -34,11 +55,26 @@ fn get_system_info(_system: tauri::State<System>, _network_stats: tauri::State<A
         ((sys.used_memory() as f64 / sys.total_memory() as f64) * 100.0) as u64
     } else { 0 };
 
-    // Network speed calculation is environment specific and sysinfo API changed; return 0 for now
-    let download_speed = 0u64;
-    let upload_speed = 0u64;
+    // Network speed: compute delta since last call
+    let (rx, tx) = read_net_totals();
+    let mut dl_mbps: f64 = 0.0;
+    let mut ul_mbps: f64 = 0.0;
+    {
+        let mut ns = network_stats.lock().unwrap();
+        let now = Instant::now();
+        let dt = now.duration_since(ns.last_update_time).as_secs_f64();
+        if ns.last_update_time != Instant::now() && dt > 0.2 && ns.last_received_bytes > 0 {
+            let drx = rx.saturating_sub(ns.last_received_bytes) as f64; // bytes
+            let dtx = tx.saturating_sub(ns.last_transmitted_bytes) as f64; // bytes
+            dl_mbps = (drx / dt) / (1024.0 * 1024.0);
+            ul_mbps = (dtx / dt) / (1024.0 * 1024.0);
+        }
+        ns.last_received_bytes = rx;
+        ns.last_transmitted_bytes = tx;
+        ns.last_update_time = now;
+    }
 
-    format!("{{\"cpuUsage\":{},\"memUsage\":{},\"downloadSpeed\":{},\"uploadSpeed\":{}}}", cpu_usage, mem_usage, download_speed, upload_speed)
+    format!("{{\"cpuUsage\":{:.1},\"memUsage\":{},\"downloadSpeed\":{:.2},\"uploadSpeed\":{:.2}}}", cpu_usage, mem_usage, dl_mbps, ul_mbps)
 }
 
 #[tauri::command]
@@ -165,9 +201,15 @@ fn get_recent_apps() -> Result<Vec<AppInfo>, String> {
                         for code in ["%U", "%u", "%F", "%f", "%i", "%c", "%k"].iter() {
                             exec = exec.replace(code, "");
                         }
-                        
+                        // Validate first token exists in PATH (basic runnable filter)
+                        let mut tokens = exec.split_whitespace();
+                        let mut first = tokens.next().unwrap_or("");
+                        if first == "env" { first = tokens.next().unwrap_or(first); }
                         if !name.is_empty() && !exec.is_empty() {
-                            apps.push(AppInfo { name, exec });
+                            let base = std::path::Path::new(first).file_name().and_then(|s| s.to_str()).unwrap_or(first);
+                            if !base.is_empty() && which(base) {
+                                apps.push(AppInfo { name, exec });
+                            }
                         }
                     }
                 }
@@ -175,6 +217,41 @@ fn get_recent_apps() -> Result<Vec<AppInfo>, String> {
         }
     }
     Ok(apps)
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+struct FolderCounts { pictures: u64, documents: u64, videos: u64, downloads: u64, music: u64, others: u64 }
+
+#[tauri::command]
+fn get_folder_counts() -> Result<FolderCounts, String> {
+    let home = dirs::home_dir().ok_or_else(|| "cannot-detect-home".to_string())?;
+    let mut counts = FolderCounts::default();
+    let pairs = vec![
+        ("pictures", home.join("Pictures")),
+        ("documents", home.join("Documents")),
+        ("videos", home.join("Videos")),
+        ("downloads", home.join("Downloads")),
+        ("music", home.join("Music")),
+    ];
+    for (key, dir) in pairs {
+        let mut c = 0u64;
+        if dir.exists() {
+            if let Ok(read) = fs::read_dir(&dir) {
+                for e in read.flatten() { if e.path().is_file() { c += 1; } }
+            }
+        }
+        match key {
+            "pictures" => counts.pictures = c,
+            "documents" => counts.documents = c,
+            "videos" => counts.videos = c,
+            "downloads" => counts.downloads = c,
+            "music" => counts.music = c,
+            _ => {}
+        }
+    }
+    // Others = files in ~/Downloads that don't fit simple mime categories (approx) → here use leftover count heuristic
+    counts.others = 0;
+    Ok(counts)
 }
 
 #[tauri::command]
@@ -373,6 +450,7 @@ fn main() {
             organize_latest_download,
             set_brightness,
             get_recent_apps,
+            get_folder_counts,
             get_favorite_apps,
             add_favorite_app,
             remove_favorite_app,

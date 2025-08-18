@@ -21,7 +21,6 @@ export type SystemInfo = {
 
 export type AppInfo = { name: string; exec?: string }
 
-const delay = (ms: number) => new Promise((res) => setTimeout(res, ms))
 
 async function safeInvoke<T = unknown>(cmd: string, payload?: Record<string, unknown>): Promise<T> {
   const inv = getTauriInvoke()
@@ -31,125 +30,67 @@ async function safeInvoke<T = unknown>(cmd: string, payload?: Record<string, unk
 
 export const api = {
   async getSystemInfo(): Promise<SystemInfo> {
-    try {
-      const raw = await safeInvoke<string>('get_system_info')
-      const parsed = JSON.parse(raw) as SystemInfo
-      return parsed
-    } catch {
-      // モック
-      await delay(200)
-      return {
-        cpuUsage: 37.2,
-        memUsage: 62,
-        downloadSpeed: 0,
-        uploadSpeed: 0,
-      }
-    }
+  const raw = await safeInvoke<string>('get_system_info')
+  const parsed = JSON.parse(raw) as SystemInfo
+  return parsed
   },
 
   async setVolume(volume: number): Promise<{ ok: boolean }> {
-    try {
-      await safeInvoke('set_volume', { volume })
-      return { ok: true }
-    } catch {
-      await delay(100)
-      return { ok: true }
-    }
+  try { await safeInvoke('set_volume', { volume }); return { ok: true } }
+  catch { return { ok: false } }
   },
 
   async getRecentApps(): Promise<AppInfo[]> {
+  try { return await safeInvoke<AppInfo[]>('get_recent_apps') }
+  catch { return [] }
+  },
+
+  async getFolderCounts(): Promise<{ pictures: number; documents: number; videos: number; downloads: number; music: number; others: number }>{
     try {
-      return await safeInvoke<AppInfo[]>('get_recent_apps')
+      return await safeInvoke('get_folder_counts')
     } catch {
-      await delay(150)
-      return [
-  { name: 'ブラウザ', exec: 'xdg-open https://example.com' },
-  { name: 'ターミナル', exec: 'xfce4-terminal' },
-  { name: '設定', exec: 'xfce4-settings-manager' },
-      ]
+      return { pictures: 0, documents: 0, videos: 0, downloads: 0, music: 0, others: 0 }
     }
   },
 
   async getFavoriteApps(): Promise<AppInfo[]> {
-    try {
-      return await safeInvoke<AppInfo[]>('get_favorite_apps')
-    } catch {
-      await delay(150)
-      return [
-        { name: 'メモ' },
-        { name: '音楽' },
-      ]
-    }
+  try { return await safeInvoke<AppInfo[]>('get_favorite_apps') }
+  catch { return [] }
   },
 
   async addFavoriteApp(app: AppInfo): Promise<{ ok: boolean }> {
-    try {
-      await safeInvoke('add_favorite_app', { app })
-      return { ok: true }
-    } catch {
-      await delay(120)
-      return { ok: true }
-    }
+  try { await safeInvoke('add_favorite_app', { app }); return { ok: true } }
+  catch { return { ok: false } }
   },
 
   async removeFavoriteApp(appName: string): Promise<{ ok: boolean }> {
-    try {
-      await safeInvoke('remove_favorite_app', { appName })
-      return { ok: true }
-    } catch {
-      await delay(120)
-      return { ok: true }
-    }
+  try { await safeInvoke('remove_favorite_app', { appName }); return { ok: true } }
+  catch { return { ok: false } }
   },
 
   async takeScreenshot(): Promise<{ ok: boolean }> {
-    try {
-      await safeInvoke('take_screenshot')
-      return { ok: true }
-    } catch {
-      await delay(100)
-      return { ok: true }
-    }
+  try { await safeInvoke('take_screenshot'); return { ok: true } }
+  catch { return { ok: false } }
   },
 
   async playPauseMusic(): Promise<{ ok: boolean }> {
-    try {
-      await safeInvoke('play_pause_music')
-      return { ok: true }
-    } catch {
-      await delay(100)
-      return { ok: true }
-    }
+  try { await safeInvoke('play_pause_music'); return { ok: true } }
+  catch { return { ok: false } }
   },
 
   async nextTrack(): Promise<{ ok: boolean }> {
-    try {
-      await safeInvoke('next_track')
-      return { ok: true }
-    } catch {
-      await delay(100)
-      return { ok: true }
-    }
+  try { await safeInvoke('next_track'); return { ok: true } }
+  catch { return { ok: false } }
   },
 
   async previousTrack(): Promise<{ ok: boolean }> {
-    try {
-      await safeInvoke('previous_track')
-      return { ok: true }
-    } catch {
-      await delay(100)
-      return { ok: true }
-    }
+  try { await safeInvoke('previous_track'); return { ok: true } }
+  catch { return { ok: false } }
   },
 
   async organizeFile(filePath: string): Promise<{ ok: boolean; path: string }> {
-    try {
-      await safeInvoke('organize_file', { filePath })
-      return { ok: true, path: filePath }
-    } catch {
-      await delay(200)
-      return { ok: true, path: filePath }
-    }
+  try { await safeInvoke('organize_file', { filePath }); return { ok: true, path: filePath } }
+  catch { return { ok: false, path: filePath } }
   },
 
   async organizeLatestDownload(): Promise<{ ok: boolean; message?: string }> {
