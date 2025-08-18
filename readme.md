@@ -1,6 +1,8 @@
 # SIST UI
 
 本コードのコメントはAIによるものです
+<img width="1204" height="724" alt="image" src="https://github.com/user-attachments/assets/3ee7694d-2bfd-4e15-86e1-edba3ab223fb" />
+
 ## コンセプト
 
 - **見た目**  
