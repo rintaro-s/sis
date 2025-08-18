@@ -10,3 +10,20 @@
   flex-direction: column;
   min-height: 100vh;
 }
+/* Backend error banner */
+.error-banner {
+  position: fixed;
+  top: 56px;
+  left: 0; right: 0;
+  z-index: 2000;
+  margin: 0 auto;
+  max-width: 960px;
+  padding: 10px 14px;
+  border-radius: var(--border-radius-medium);
+  border: 1px solid rgba(255, 124, 124, 0.35);
+  background: rgba(255, 240, 240, 0.85);
+  color: #7f1d1d;
+  font-size: 0.9em;
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(8px);
+}

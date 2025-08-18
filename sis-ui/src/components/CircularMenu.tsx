@@ -28,11 +28,11 @@ function CircularMenu({ isVisible, onClose }: CircularMenuProps) {
     switch (action) {
       case 'file_manager':
         try {
-          // Open user's home folder with xdg-open (desktop-agnostic)
-          await api.launchApp('xdg-open "$HOME"');
+          const r = await api.launchApp('xdg-open "$HOME"');
+          if (!r.ok) alert('ファイルマネージャを開けません')
           onClose();
         } catch (e) {
-          console.error('Failed to open file manager:', e);
+          alert('ファイルマネージャを開けません')
         }
         break;
       case 'terminal':
@@ -45,7 +45,13 @@ function CircularMenu({ isVisible, onClose }: CircularMenuProps) {
         }
         break;
       case 'documents':
-        console.log('Opening documents...');
+        try {
+          const r = await api.launchApp('xdg-open "$HOME/Documents"');
+          if (!r.ok) alert('ドキュメントを開けません')
+          onClose();
+        } catch (e) {
+          alert('ドキュメントを開けません')
+        }
         break;
       case 'apps':
         try {

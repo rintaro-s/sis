@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import './Settings.css';
 
@@ -11,33 +11,44 @@ function Settings() {
 
   const applyVolume = async (v: number) => {
     setVolume(v)
-    await api.setVolume(v)
+    const r = await api.setVolume(v)
+    if (!r.ok) alert('音量変更に失敗しました')
   }
   const applyBrightness = async (v: number) => {
     setBrightness(v)
-    await api.setBrightness(v)
+    const r = await api.setBrightness(v)
+    if (!r.ok) alert('輝度変更に失敗しました')
   }
   const toggleNetwork = async () => {
     const next = !network
     setNetwork(next)
-    await api.networkSet(next)
+    const r = await api.networkSet(next)
+    if (!r.ok) alert('ネットワーク切替に失敗しました')
   }
   const toggleBluetooth = async () => {
     const next = !bluetooth
     setBluetooth(next)
-    await api.bluetoothSet(next)
+    const r = await api.bluetoothSet(next)
+    if (!r.ok) alert('Bluetooth切替に失敗しました')
   }
   const power = async (action: 'shutdown' | 'reboot' | 'logout') => {
-    await api.powerAction(action)
+    const r = await api.powerAction(action)
+    if (!r.ok) alert('電源操作に失敗しました')
   }
+
+  // simple theme switch using data-theme on body
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+  useEffect(() => {
+    document.body.dataset.theme = theme
+  }, [theme])
   return (
     <div className="settings">
       <h3>設定</h3>
       <div className="setting-item">
         <span>テーマ</span>
         <div className="theme-selector">
-          <button className="theme-button active">ダーク</button>
-          <button className="theme-button">ライト</button>
+          <button className={`theme-button ${theme==='dark'?'active':''}`} onClick={()=>setTheme('dark')}>ダーク</button>
+          <button className={`theme-button ${theme==='light'?'active':''}`} onClick={()=>setTheme('light')}>ライト</button>
         </div>
       </div>
       <div className="setting-item">

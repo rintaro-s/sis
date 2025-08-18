@@ -60,6 +60,20 @@ body {
   font-weight: 400;
 }
 
+/* Light/Dark quick theme */
+body[data-theme='light']{
+  --bg-void: linear-gradient(135deg, #ffffff 0%, #f1f5f9 40%, #ffffff 100%);
+  --bg-panel: rgba(255,255,255,0.85);
+  --text-primary: #1f2937;
+}
+body[data-theme='dark']{
+  --bg-void: linear-gradient(135deg, #0f172a 0%, #111827 40%, #0b1220 100%);
+  --bg-panel: rgba(17, 24, 39, 0.65);
+  --bg-glass: rgba(30, 41, 59, 0.45);
+  --text-primary: #e5e7eb;
+  --text-secondary: #cbd5e1;
+}
+
 /* Reduce motion for users (or when performance constrained) */
 @media (prefers-reduced-motion: reduce) {
   * {
