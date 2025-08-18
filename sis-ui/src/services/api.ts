@@ -152,6 +152,15 @@ export const api = {
     }
   },
 
+  async organizeLatestDownload(): Promise<{ ok: boolean; message?: string }> {
+    try {
+      const msg = await safeInvoke<string>('organize_latest_download')
+      return { ok: true, message: msg }
+    } catch (e) {
+      return { ok: false, message: (e as Error)?.message }
+    }
+  },
+
   async setBrightness(percent: number): Promise<{ ok: boolean; message?: string }> {
     try {
       const msg = await safeInvoke<string>('set_brightness', { percent: Math.max(0, Math.min(100, Math.floor(percent))) })

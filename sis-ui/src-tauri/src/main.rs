@@ -43,6 +43,35 @@ fn get_system_info(_system: tauri::State<System>, _network_stats: tauri::State<A
 
 #[tauri::command]
 fn organize_file(file_path: String) -> Result<String, String> {
+#[tauri::command]
+fn organize_latest_download() -> Result<String, String> {
+    // Find the most recently modified regular file in ~/Downloads and organize it
+    let home = dirs::home_dir().ok_or_else(|| "cannot-detect-home".to_string())?;
+    let downloads = home.join("Downloads");
+    if !downloads.exists() { return Err("Downloads directory not found".into()); }
+
+    let mut latest_path: Option<PathBuf> = None;
+    let mut latest_mtime: Option<std::time::SystemTime> = None;
+
+    let entries = fs::read_dir(&downloads).map_err(|e| format!("Failed to read Downloads: {}", e))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        let path = entry.path();
+        if path.is_file() {
+            if let Ok(meta) = entry.metadata() {
+                if let Ok(modified) = meta.modified() {
+                    match latest_mtime {
+                        None => { latest_mtime = Some(modified); latest_path = Some(path); }
+                        Some(prev) => if modified > prev { latest_mtime = Some(modified); latest_path = Some(path); }
+                    }
+                }
+            }
+        }
+    }
+
+    let target = latest_path.ok_or_else(|| "no-files-in-downloads".to_string())?;
+    organize_file(target.to_string_lossy().to_string())
+}
     let path = Path::new(&file_path);
     if !path.exists() {
         return Err(format!("File does not exist: {}", file_path));
@@ -336,6 +365,7 @@ fn main() {
             get_system_info,
             organize_file,
             set_volume,
+            organize_latest_download,
             set_brightness,
             get_recent_apps,
             get_favorite_apps,

@@ -1,5 +1,6 @@
 
 import FileManager from './FileManager';
+import { api } from '../services/api';
 import AppStore from './AppStore';
 import Settings from './Settings';
 import { IconApp, IconFolder, IconTerminal } from '../assets/icons';
@@ -19,7 +20,11 @@ function HomeScreen() {
           <img src={IconFolder} alt="Folder" />
           <span>Folder 1</span>
         </div>
-        <div className="shortcut-card">
+        <div className="shortcut-card" onClick={async () => {
+          try {
+            await api.launchApp('xfce4-terminal || x-terminal-emulator || gnome-terminal');
+          } catch (e) { console.error('Failed to open terminal', e); }
+        }}>
           <img src={IconTerminal} alt="Terminal" />
           <span>Terminal</span>
         </div>

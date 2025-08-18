@@ -7,16 +7,29 @@ function FileManager() {
   const [filesOrganized, setFilesOrganized] = useState(false);
 
   const handleOrganizeFiles = async () => {
-    // This is a placeholder for now. In a real scenario, you'd get a list of files to organize.
-    // For demonstration, let's assume a dummy file path.
-    const dummyFilePath = "C:/Users/user/Downloads/test_image.jpg"; // ダミーパス（Windows向け）
     try {
-      const result = await api.organizeFile(dummyFilePath);
+      const result = await api.organizeLatestDownload();
       console.log(result);
       setFilesOrganized(true);
-      setTimeout(() => setFilesOrganized(false), 3000); // Hide message after 3 seconds
+      setTimeout(() => setFilesOrganized(false), 3000);
     } catch (error) {
       console.error('Failed to organize file:', error);
+    }
+  };
+
+  const openDownloads = async () => {
+    try {
+      await api.launchApp('xdg-open "$HOME/Downloads"');
+    } catch (e) {
+      console.error('Failed to open Downloads:', e);
+    }
+  };
+
+  const openHome = async () => {
+    try {
+      await api.launchApp('xdg-open "$HOME"');
+    } catch (e) {
+      console.error('Failed to open Home:', e);
     }
   };
 
@@ -45,7 +58,11 @@ function FileManager() {
           <span className="file-count">📁 50</span>
         </div>
       </div>
-      <button onClick={handleOrganizeFiles}>ファイルを整理</button>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button onClick={handleOrganizeFiles}>最新のダウンロードを整理</button>
+        <button onClick={openDownloads}>Downloads を開く</button>
+        <button onClick={openHome}>ホームを開く</button>
+      </div>
       {filesOrganized && <p className="organization-message">ファイルが整理されました！</p>}
     </div>
   );

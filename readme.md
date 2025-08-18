@@ -151,19 +151,27 @@ sudo権限で以下を実行:
 ./package_install.sh
 ```
 
-2) ビルドと .deb 生成
+2) ビルドと .deb 生成（動作確認用: try-deploy）
 
 ```
 cd sis-ui
 npm ci
 npm run build
 cd ..
-./deploy.sh
+./try-deploy.sh
 ```
 
 完了後、build/ 以下に sis-ui_0.1.0_amd64.deb ができます。
 
-3) インストールと自動起動設定
+3) 最小DE連携まで含めたセットアップ（DE-deploy）
+
+以下で xfwm4 + picom など最小構成を導入し、パッケージのビルド/インストール、自動起動設定まで実施します。
+
+```
+sudo ./DE-deploy.sh
+```
+
+4) インストールと自動起動設定（個別）
 
 ```
 sudo apt install ./build/sis-ui_0.1.0_amd64.deb

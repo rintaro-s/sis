@@ -28,10 +28,22 @@ function CircularMenu({ isVisible, onClose }: CircularMenuProps) {
   const handleItemClick = async (action: string) => {
     switch (action) {
       case 'file_manager':
-        console.log('Opening file manager...');
+        try {
+          // Open user's home folder with xdg-open (desktop-agnostic)
+          await api.launchApp('xdg-open "$HOME"');
+          onClose();
+        } catch (e) {
+          console.error('Failed to open file manager:', e);
+        }
         break;
       case 'terminal':
-        console.log('Opening terminal...');
+        try {
+          // Prefer xfce4-terminal when available; fallback to x-terminal-emulator
+          await api.launchApp('xfce4-terminal || x-terminal-emulator || gnome-terminal');
+          onClose();
+        } catch (e) {
+          console.error('Failed to open terminal:', e);
+        }
         break;
       case 'documents':
         console.log('Opening documents...');
@@ -127,7 +139,20 @@ function CircularMenu({ isVisible, onClose }: CircularMenuProps) {
                 recentApps.map((app, index) => (
                   <li key={index}>
                     {app.name}
-                    <button onClick={() => console.log(`Starting ${app.name}`)}>起動</button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          if (!app.exec || app.exec.trim() === '') {
+                            console.warn('No exec available for', app.name);
+                            return;
+                          }
+                          await api.launchApp(app.exec);
+                          onClose();
+                        } catch (e) {
+                          console.error('Failed to launch app:', e);
+                        }
+                      }}
+                    >起動</button>
                   </li>
                 ))
               ) : (

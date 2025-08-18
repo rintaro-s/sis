@@ -60,6 +60,16 @@ body {
   font-weight: 400;
 }
 
+/* Reduce motion for users (or when performance constrained) */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Ethereal cursors for delicate interactions */
 a, button, .clickable, .shortcut-card, .game-button { 
   cursor: pointer; 
@@ -123,7 +133,8 @@ input[type="text"], textarea { cursor: text; }
 
 .glass-panel {
   background: var(--bg-glass);
-  backdrop-filter: blur(20px) saturate(180%);
+  /* Keep blur lighter to reduce GPU load and flicker */
+  backdrop-filter: blur(10px) saturate(150%);
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
