@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import type React from 'react';
+import { useState, useMemo } from 'react';
 import { api } from '../services/api';
 import type { AppInfo } from '../services/api';
 import { IconSettings, IconApp, IconFolder, IconTerminal } from '../assets/icons';
@@ -14,7 +13,7 @@ function CircularMenu({ isVisible, onClose }: CircularMenuProps) {
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
   const [recentApps, setRecentApps] = useState<AppInfo[]>([]);
   
-  const menuItems = [
+  const menuItems = useMemo(() => [
     { name: 'ファイル', icon: IconFolder, action: 'file_manager' },
     { name: 'ターミナル', icon: IconTerminal, action: 'terminal' },
     { name: 'ドキュメント', icon: IconFolder, action: 'documents' },
@@ -23,7 +22,7 @@ function CircularMenu({ isVisible, onClose }: CircularMenuProps) {
     { name: 'スクリーン', icon: IconSettings, action: 'screenshot' },
     { name: 'ミュージック', icon: IconApp, action: 'music' },
     { name: 'ボリューム', icon: IconSettings, action: 'volume' },
-  ];
+  ], []);
 
   const handleItemClick = async (action: string) => {
     switch (action) {

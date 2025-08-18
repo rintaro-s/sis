@@ -137,6 +137,17 @@ cargo tauri build --features overlay_raylib
 
 注意: Windowsではビルド要件が増えます。未有効時はAPIは安全に失敗します。
 
+## ローカルLLMの配置と動作要件
+
+README に書かれている LLM (GGUF) はリポジトリ内 `LLM/` フォルダに配置してください。デフォルトで期待するファイル/バイナリ:
+
+- `LLM/gemma-3-12b-it-Q4_K_M.gguf` — モデルファイル (GGUF)
+- `LLM/llama_server` — ローカルでモデルをサービスする実行バイナリ（例えば llama.cpp のサーバーラッパ等）。
+
+バックエンドは `llm_query` コマンドで `LLM/llama_server --model LLM/gemma-3-12b-it-Q4_K_M.gguf --prompt "..."` を起動して出力を受け取る想定です。実行環境に依存して GPU/CUDA対応のランナーを用意してください。
+
+注: ここでは安全のためローカルのランナーを期待します。クラウドAPI等を使う場合は別途認証と安全制御を実装してください。
+
 ---
 
 ## シンプルDEとして動かす（Xfce連携 + .deb パッケージ）

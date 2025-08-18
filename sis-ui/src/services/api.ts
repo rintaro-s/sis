@@ -204,6 +204,78 @@ export const api = {
       return { ok: false, message: (e as Error)?.message }
     }
   },
+
+  async networkSet(enable: boolean): Promise<{ ok: boolean; message?: string }> {
+    try {
+      const msg = await safeInvoke<string>('network_set', { enable })
+      return { ok: true, message: msg }
+    } catch (e) {
+      return { ok: false, message: (e as Error)?.message }
+    }
+  },
+
+  async bluetoothSet(enable: boolean): Promise<{ ok: boolean; message?: string }> {
+    try {
+      const msg = await safeInvoke<string>('bluetooth_set', { enable })
+      return { ok: true, message: msg }
+    } catch (e) {
+      return { ok: false, message: (e as Error)?.message }
+    }
+  },
+
+  async powerAction(action: 'shutdown' | 'reboot' | 'logout'): Promise<{ ok: boolean; message?: string }> {
+    try {
+      const msg = await safeInvoke<string>('power_action', { action })
+      return { ok: true, message: msg }
+    } catch (e) {
+      return { ok: false, message: (e as Error)?.message }
+    }
+  },
+
+  async llmQuery(prompt: string): Promise<{ ok: boolean; text?: string; message?: string }> {
+    try {
+      const text = await safeInvoke<string>('llm_query', { prompt })
+      return { ok: true, text }
+    } catch (e) {
+      return { ok: false, message: (e as Error)?.message }
+    }
+  },
+
+  async runSafeCommand(cmdline: string): Promise<{ ok: boolean; text?: string; message?: string }> {
+    try {
+      const text = await safeInvoke<string>('run_safe_command', { cmdline })
+      return { ok: true, text }
+    } catch (e) {
+      return { ok: false, message: (e as Error)?.message }
+    }
+  },
+
+  async clamavScan(path: string): Promise<{ ok: boolean; text?: string; message?: string }> {
+    try {
+      const text = await safeInvoke<string>('clamav_scan', { path })
+      return { ok: true, text }
+    } catch (e) {
+      return { ok: false, message: (e as Error)?.message }
+    }
+  },
+
+  async kdeconnectList(): Promise<{ ok: boolean; text?: string; message?: string }> {
+    try {
+      const text = await safeInvoke<string>('kdeconnect_list')
+      return { ok: true, text }
+    } catch (e) {
+      return { ok: false, message: (e as Error)?.message }
+    }
+  },
+
+  async runWithSudo(cmdline: string, password: string): Promise<{ ok: boolean; text?: string; message?: string }> {
+    try {
+      const text = await safeInvoke<string>('run_with_sudo', { cmdline, password })
+      return { ok: true, text }
+    } catch (e) {
+      return { ok: false, message: (e as Error)?.message }
+    }
+  },
 }
 
 export type Api = typeof api

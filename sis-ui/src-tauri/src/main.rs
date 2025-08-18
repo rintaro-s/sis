@@ -10,7 +10,7 @@ use tauri::Manager;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use cfg_if::cfg_if;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use serde::{Serialize, Deserialize};
 
 struct NetworkStats {
@@ -383,7 +383,16 @@ fn main() {
             launch_app,
             overlay_start,
             overlay_stop,
-            overlay_status
+            overlay_status,
+            // Newly added commands to expose via invoke
+            network_set,
+            bluetooth_set,
+            power_action,
+            llm_query,
+            run_safe_command,
+            run_with_sudo,
+            clamav_scan,
+            kdeconnect_list
         ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
@@ -428,4 +437,149 @@ fn overlay_start() -> Result<String, String> {
 fn overlay_stop() -> Result<String, String> {
     OVERLAY_RUNNING.store(false, Ordering::SeqCst);
     Ok("overlay-stopped".into())
+}
+
+#[tauri::command]
+fn network_set(enable: bool) -> Result<String, String> {
+    let cmd = if enable { "nmcli" } else { "nmcli" };
+    let arg = if enable { vec!["networking", "on"] } else { vec!["networking", "off"] };
+    let mut c = Command::new(cmd);
+    for a in arg { c.arg(a); }
+    match c.output() {
+        Ok(o) => if o.status.success() { Ok(format!("networking {}", if enable { "on" } else { "off" })) } else { Err(String::from_utf8_lossy(&o.stderr).to_string()) },
+        Err(e) => Err(format!("failed-to-run-nmcli: {}", e)),
+    }
+}
+
+#[tauri::command]
+fn bluetooth_set(enable: bool) -> Result<String, String> {
+    // Try rfkill/block as a simple fallback
+    let action = if enable { "unblock" } else { "block" };
+    match Command::new("rfkill").arg(action).arg("bluetooth").output() {
+        Ok(o) => if o.status.success() { Ok(format!("bluetooth {}", action)) } else { Err(String::from_utf8_lossy(&o.stderr).to_string()) },
+        Err(e) => Err(format!("failed-to-run-rfkill: {}", e)),
+    }
+}
+
+#[tauri::command]
+fn power_action(action: String) -> Result<String, String> {
+    // action: shutdown | reboot | logout
+    match action.as_str() {
+        "shutdown" => match Command::new("systemctl").arg("poweroff").spawn() { Ok(_) => Ok("shutting-down".into()), Err(e) => Err(format!("failed-to-shutdown: {}", e)) },
+        "reboot" => match Command::new("systemctl").arg("reboot").spawn() { Ok(_) => Ok("rebooting".into()), Err(e) => Err(format!("failed-to-reboot: {}", e)) },
+        "logout" => match Command::new("pkill").arg("-KILL").arg("-u").arg(std::env::var("USER").unwrap_or_else(|_| "".into())).spawn() { Ok(_) => Ok("logging-out".into()), Err(e) => Err(format!("failed-to-logout: {}", e)) },
+        other => Err(format!("unsupported-action: {}", other)),
+    }
+}
+
+#[tauri::command]
+fn llm_query(prompt: String) -> Result<String, String> {
+    // Expect model at ./LLM/gemma-3-12b-it-Q4_K_M.gguf and a local runner binary at ./LLM/llama_server
+    let model = PathBuf::from("LLM/gemma-3-12b-it-Q4_K_M.gguf");
+    if !model.exists() {
+        return Err("model-not-found: place gemma-3-12b-it-Q4_K_M.gguf in ./LLM".into());
+    }
+    let runner = PathBuf::from("LLM/llama_server");
+    if !runner.exists() {
+        return Err("llama_server-not-found: put a compatible local runner binary at ./LLM/llama_server".into());
+    }
+    match Command::new(runner).arg("--model").arg(model).arg("--prompt").arg(prompt).output() {
+        Ok(o) => {
+            if o.status.success() { Ok(String::from_utf8_lossy(&o.stdout).to_string()) }
+            else { Err(format!("llm-error: {}", String::from_utf8_lossy(&o.stderr))) }
+        }
+        Err(e) => Err(format!("failed-to-start-llm-runner: {}", e)),
+    }
+}
+
+fn which(cmd: &str) -> bool {
+    Command::new("sh")
+        .arg("-c")
+        .arg(format!("command -v {} >/dev/null 2>&1", cmd))
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+#[tauri::command]
+fn run_safe_command(cmdline: String) -> Result<String, String> {
+    let trimmed = cmdline.trim();
+    if trimmed.is_empty() { return Err("empty-cmd".into()); }
+    // allowlist simple guard
+    let first = trimmed.split_whitespace().next().unwrap_or("");
+    let base = Path::new(first).file_name().and_then(|s| s.to_str()).unwrap_or(first);
+    let allow = [
+        "xdg-open","ls","cp","mv","mkdir","tar","zip","unzip",
+        "playerctl","pactl","brightnessctl","nmcli","rfkill","gnome-screenshot",
+        "kdeconnect-cli","clamscan","echo"
+    ];
+    if !allow.contains(&base) { return Err(format!("command-not-allowed: {}", base)); }
+    if trimmed.contains(" rm ") || trimmed.starts_with("rm ") || trimmed.contains(" sudo ") {
+        return Err("unsafe-command-rejected".into());
+    }
+    match Command::new("sh").arg("-c").arg(trimmed).output() {
+        Ok(o) => {
+            if o.status.success() { Ok(String::from_utf8_lossy(&o.stdout).to_string()) }
+            else { Err(String::from_utf8_lossy(&o.stderr).to_string()) }
+        }
+        Err(e) => Err(format!("failed-to-run: {}", e))
+    }
+}
+
+#[tauri::command]
+fn clamav_scan(path: String) -> Result<String, String> {
+    if !which("clamscan") { return Err("clamscan-not-found".into()); }
+    match Command::new("clamscan").arg("-i").arg("-r").arg(&path).output() {
+        Ok(o) => Ok(String::from_utf8_lossy(&o.stdout).to_string()),
+        Err(e) => Err(format!("failed-to-run-clamscan: {}", e)),
+    }
+}
+
+#[tauri::command]
+fn kdeconnect_list() -> Result<String, String> {
+    if !which("kdeconnect-cli") { return Err("kdeconnect-cli-not-found".into()); }
+    match Command::new("kdeconnect-cli").arg("--list-devices").output() {
+        Ok(o) => Ok(String::from_utf8_lossy(&o.stdout).to_string()),
+        Err(e) => Err(format!("failed-to-run-kdeconnect: {}", e)),
+    }
+}
+
+#[tauri::command]
+fn run_with_sudo(cmdline: String, password: String) -> Result<String, String> {
+    // Very small wrapper to run a single command with sudo by providing the password via stdin.
+    // Note: This is convenient but has security implications; prefer polkit or proper privilege separation in production.
+    let trimmed = cmdline.trim();
+    if trimmed.is_empty() { return Err("empty-cmd".into()); }
+
+    // Build sudo -S -p '' sh -c '<cmdline>' so sudo reads password from stdin without prompt text
+    let mut child = match Command::new("sh")
+        .arg("-c")
+        .arg(format!("sudo -S -p '' {}", trimmed))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => return Err(format!("failed-to-spawn-sudo: {}", e)),
+    };
+
+    if let Some(mut stdin) = child.stdin.take() {
+        use std::io::Write;
+        // write password + newline
+        if let Err(e) = stdin.write_all(format!("{}\n", password).as_bytes()) {
+            return Err(format!("failed-to-write-password: {}", e));
+        }
+    }
+
+    match child.wait_with_output() {
+        Ok(out) => {
+            if out.status.success() {
+                Ok(String::from_utf8_lossy(&out.stdout).to_string())
+            } else {
+                Err(String::from_utf8_lossy(&out.stderr).to_string())
+            }
+        }
+        Err(e) => Err(format!("failed-waiting-for-sudo: {}", e)),
+    }
 }

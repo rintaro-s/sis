@@ -6,7 +6,7 @@ type Props = { visible: boolean }
 // Halo HUD: キーホールド中だけ出現する円形ヘルプ/ショートカットHUD
 export default function HaloHud({ visible }: Props) {
   const [hint, setHint] = useState('')
-  const [pos, setPos] = useState<{ x: number; y: number }>({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
+  const posRef = useRef<{ x: number; y: number }>({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
   const lastMouseRef = useRef<{ x: number; y: number }>({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
   const startRef = useRef<{ x: number; y: number } | null>(null)
   const selectedRef = useRef<string | null>(null)
@@ -28,7 +28,12 @@ export default function HaloHud({ visible }: Props) {
         if (el) {
           const t = now * 0.001
           const glow = 0.4 + Math.sin(t * 2) * 0.2
-          el.style.boxShadow = `0 0 ${24 + glow * 16}px rgba(168, 195, 255, ${0.35 + glow * 0.25})`
+          // update visual effects directly; avoid layout thrash
+          el.style.boxShadow = `0 0 ${24 + glow * 12}px rgba(168, 195, 255, ${0.28 + glow * 0.22})`
+          // update position via transform to avoid layout reflow
+          const p = posRef.current
+          // offset by half size (130) to center
+          el.style.transform = `translate3d(${p.x - 130}px, ${p.y - 130}px, 0)`
         }
       }
       rafRef.current = requestAnimationFrame(tick)
@@ -45,27 +50,27 @@ export default function HaloHud({ visible }: Props) {
     if (visible) {
       // 表示時: 現在のマウス位置をHUDの中心に
       const p = lastMouseRef.current
-      setPos(p)
+      posRef.current = p
+      // set initial transform immediately
+      if (ringRef.current) ringRef.current.style.transform = `translate3d(${p.x - 130}px, ${p.y - 130}px, 0)`
       setHint('')
       startRef.current = p
       selectedRef.current = null
-      // マウスの動きを追跡
+      // マウスの動きを追跡。setStateは最小限にしてヒント更新は throttled
       let queued = false
+      let lastHint = ''
       const onMove = (e: MouseEvent) => {
-        // batch updates via rAF to avoid setState storms
         lastMouseRef.current = { x: e.clientX, y: e.clientY }
         if (!queued) {
           queued = true
           requestAnimationFrame(() => {
             queued = false
-            const k = (e.target as HTMLElement)?.getAttribute('data-hint')
-            setHint(k ?? '')
             const s = startRef.current
             if (s) {
               const dx = lastMouseRef.current.x - s.x
               const dy = lastMouseRef.current.y - s.y
               const dist = Math.hypot(dx, dy)
-              const dead = 28 // slightly larger deadzone to reduce jitter
+              const dead = 28
               if (dist > dead) {
                 const angle = Math.atan2(dy, dx)
                 const sector = Math.round(((angle + Math.PI) / (2 * Math.PI)) * 6) % 6
@@ -75,6 +80,14 @@ export default function HaloHud({ visible }: Props) {
                 selectedRef.current = null
               }
             }
+            // update position ref for RAF updater
+            posRef.current = { x: lastMouseRef.current.x, y: lastMouseRef.current.y }
+            // hint detection (throttled by comparing lastHint)
+            const k = (e.target as HTMLElement)?.getAttribute('data-hint') || ''
+            if (k !== lastHint) {
+              lastHint = k
+              setHint(k)
+            }
           })
         }
       }
@@ -82,7 +95,7 @@ export default function HaloHud({ visible }: Props) {
       return () => {
         window.removeEventListener('mousemove', onMove)
         // 表示終了時: 選択を確定
-  if (selectedRef.current) console.log('Halo select:', selectedRef.current)
+        if (selectedRef.current) console.log('Halo select:', selectedRef.current)
         startRef.current = null
         selectedRef.current = null
       }
@@ -103,7 +116,7 @@ export default function HaloHud({ visible }: Props) {
   return (
     <div className="halo-root">
       <div className="halo-overlay" />
-  <div className="halo-ring" ref={ringRef} style={{ left: pos.x, top: pos.y }}>
+  <div className="halo-ring" ref={ringRef}>
         <div className="halo-center" data-hint="Spaceを離すと閉じます" />
         {actions.map((a, i) => (
           <div
