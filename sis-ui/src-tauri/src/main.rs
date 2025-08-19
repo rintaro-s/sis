@@ -184,7 +184,14 @@ fn parse_localized_name(content: &str) -> String {
     if let Some(line) = content.lines().find(|l| l.starts_with("Name=")) {
         if let Some(v) = line.splitn(2, '=').nth(1) { name = Some(v.trim().to_string()); }
     }
-    name.unwrap_or_else(|| "Unknown".to_string())
+    if let Some(n) = name { return n }
+    // fallback: GenericName or Comment
+    for key in ["GenericName[ja]","GenericName[en]","GenericName","Comment[ja]","Comment[en]","Comment"] {
+        if let Some(line) = content.lines().find(|l| l.starts_with(key)) {
+            if let Some(v) = line.splitn(2, '=').nth(1) { return v.trim().to_string(); }
+        }
+    }
+    "Unknown".to_string()
 }
 
 fn resolve_icon_path(raw: &str) -> Option<std::path::PathBuf> {
@@ -202,6 +209,14 @@ fn resolve_icon_path(raw: &str) -> Option<std::path::PathBuf> {
     }
     candidates.push(PathBuf::from("/usr/share/icons"));
     candidates.push(PathBuf::from("/usr/share/pixmaps"));
+    // Include common theme names directly
+    for theme in ["hicolor","Papirus","Adwaita","Yaru","Numix","Humanity"] {
+        if let Some(home) = dirs::home_dir() {
+            candidates.push(home.join(format!(".icons/{theme}")));
+            candidates.push(home.join(format!(".local/share/icons/{theme}")));
+        }
+        candidates.push(PathBuf::from(format!("/usr/share/icons/{theme}")));
+    }
     for base in candidates {
         // hicolor theme typical layout
         for size in &sizes {

@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import './HaloHud.css'
 
-type Props = { visible: boolean }
+type Props = { visible: boolean; onAction?: (id: string) => void; onClose?: () => void }
 
 // Halo HUD: キーホールド中だけ出現する円形ヘルプ/ショートカットHUD
-export default function HaloHud({ visible }: Props) {
+export default function HaloHud({ visible, onAction, onClose }: Props) {
   const [hint, setHint] = useState('')
   const posRef = useRef<{ x: number; y: number }>({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
   const lastMouseRef = useRef<{ x: number; y: number }>({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
@@ -113,11 +113,19 @@ export default function HaloHud({ visible }: Props) {
     { key: 'C', label: 'コントロール', hint: 'Wi-Fi / BT / 明るさ' },
   ]
 
+  const idByIndex = ['launcher','files','music','volume','screen','control']
+  const handlePick = (i: number) => {
+    const id = idByIndex[i]
+    if (onAction) onAction(id)
+    if (onClose) onClose()
+  }
+  const handleCancel = () => { if (onClose) onClose() }
+
   return (
-    <div className="halo-root">
+    <div className="halo-root" onContextMenu={(e)=>e.preventDefault()} onClick={handleCancel}>
       <div className="halo-overlay" />
-  <div className="halo-ring" ref={ringRef}>
-        <div className="halo-center" data-hint="Spaceを離すと閉じます" />
+      <div className="halo-ring" ref={ringRef}>
+        <div className="halo-center" data-hint="左クリックでキャンセル" />
         {actions.map((a, i) => (
           <div
             className={`halo-slot halo-slot-${i}`}
@@ -125,13 +133,14 @@ export default function HaloHud({ visible }: Props) {
             data-hint={`${a.label} — ${a.hint}`}
             aria-label={a.label}
             role="button"
+            onContextMenu={(e)=>{ e.preventDefault(); handlePick(i) }}
           >
             <span className="halo-key">{a.key}</span>
             <span className="halo-label">{a.label}</span>
           </div>
         ))}
       </div>
-      <div className="halo-hint">{hint || 'Ctrl(またはAlt)+Spaceをホールド'}</div>
+      <div className="halo-hint">{hint || 'カーソルで選んで 右クリックで実行 / 左クリックでキャンセル'}</div>
     </div>
   )
 }
