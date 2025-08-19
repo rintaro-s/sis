@@ -9,10 +9,12 @@ import HaloHud from './components/HaloHud';
 import CommandPalette from './components/CommandPalette';
 import './App.css';
 import { api } from './services/api';
+import MiniControlCenter from './components/MiniControlCenter.tsx';
 
 function App() {
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const [hudOpen, setHudOpen] = useState(false);
+  const [ccOpen, setCcOpen] = useState(false);
   const [backendError, setBackendError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,6 +32,11 @@ function App() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setHudOpen((v) => !v);
+      }
+      // Ctrl+Shift+C でコントロールセンター
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        setCcOpen((v)=>!v)
       }
       // Esc でHUD/メニューを閉じる
       // Escで閉じる
@@ -90,6 +97,7 @@ function App() {
       <HomeScreen />
   <BottomBar />
   <HaloHud visible={hudOpen} />
+  <MiniControlCenter open={ccOpen} onClose={()=>setCcOpen(false)} />
   <CommandPalette />
       <CircularMenu 
         isVisible={isMenuVisible} 

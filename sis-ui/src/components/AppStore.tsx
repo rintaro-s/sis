@@ -3,7 +3,7 @@ import './AppStore.css';
 import { api } from '../services/api';
 import { IconApp } from '../assets/icons';
 
-type AppInfo = { name: string; exec?: string }
+type AppInfo = { name: string; exec?: string; icon_data_url?: string }
 
 function AppStore() {
   const [apps, setApps] = useState<AppInfo[]>([])
@@ -34,9 +34,9 @@ function AppStore() {
         {apps.length === 0 ? (
           <div className="hint">起動可能なアプリが見つかりません</div>
         ) : (
-          apps.slice(0, 16).map((app, index) => (
+      apps.slice(0, 48).map((app, index) => (
             <div key={index} className="app-card" onClick={() => launch(app)}>
-              <img src={IconApp} alt={app.name} />
+        <img src={app.icon_data_url || IconApp} alt={app.name} />
               <span>{app.name}</span>
             </div>
           ))

@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use cfg_if::cfg_if;
 use std::process::{Command, Stdio};
 use serde::{Serialize, Deserialize};
+use base64::Engine;
 
 struct NetworkStats {
     last_received_bytes: u64,
@@ -169,6 +170,72 @@ fn set_volume(volume: u32) -> Result<String, String> {
 struct AppInfo {
     name: String,
     exec: String,
+    icon_data_url: Option<String>,
+}
+
+fn parse_localized_name(content: &str) -> String {
+    // Prefer Name[ja], then Name[en], then Name
+    let mut name: Option<String> = None;
+    for key in ["Name[ja]", "Name[en]"] {
+        if let Some(line) = content.lines().find(|l| l.starts_with(key)) {
+            if let Some(v) = line.splitn(2, '=').nth(1) { return v.trim().to_string(); }
+        }
+    }
+    if let Some(line) = content.lines().find(|l| l.starts_with("Name=")) {
+        if let Some(v) = line.splitn(2, '=').nth(1) { name = Some(v.trim().to_string()); }
+    }
+    name.unwrap_or_else(|| "Unknown".to_string())
+}
+
+fn resolve_icon_path(raw: &str) -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+    if raw.trim().is_empty() { return None; }
+    let p = Path::new(raw);
+    if p.is_absolute() && p.exists() { return Some(p.to_path_buf()); }
+    // Try common icon lookup paths
+    let mut candidates: Vec<PathBuf> = vec![];
+    let exts = ["png", "svg", "xpm"]; // webkit supports png/svg well
+    let sizes = ["512x512","256x256","128x128","64x64","48x48","32x32","24x24","16x16"];
+    if let Some(home) = dirs::home_dir() {
+        candidates.push(home.join(".local/share/icons"));
+        candidates.push(home.join(".icons"));
+    }
+    candidates.push(PathBuf::from("/usr/share/icons"));
+    candidates.push(PathBuf::from("/usr/share/pixmaps"));
+    for base in candidates {
+        // hicolor theme typical layout
+        for size in &sizes {
+            for ext in &exts {
+                let p1 = base.join("hicolor").join(size).join("apps").join(format!("{}.{}", raw, ext));
+                if p1.exists() { return Some(p1); }
+            }
+        }
+        // flat under theme or pixmaps
+        for ext in &exts {
+            let p2 = base.join(format!("{}.{}", raw, ext));
+            if p2.exists() { return Some(p2); }
+        }
+        // apps subdir without size
+        for ext in &exts {
+            let p3 = base.join("apps").join(format!("{}.{}", raw, ext));
+            if p3.exists() { return Some(p3); }
+        }
+    }
+    None
+}
+
+fn to_data_url(path: &Path) -> Option<String> {
+    use std::fs::read;
+    match read(path) {
+        Ok(bytes) => {
+            let mime = if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+                match ext.to_ascii_lowercase().as_str() { "svg" => "image/svg+xml", "xpm" => "image/x-xpixmap", _ => "image/png" }
+            } else { "image/png" };
+            let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+            Some(format!("data:{};base64,{}", mime, b64))
+        }
+        Err(_) => None,
+    }
 }
 
 #[tauri::command]
@@ -189,14 +256,15 @@ fn get_recent_apps() -> Result<Vec<AppInfo>, String> {
                 let path = entry.path();
                 if path.is_file() && path.extension().map_or(false, |ext| ext == "desktop") {
                     if let Ok(content) = fs::read_to_string(&path) {
-                        let name = content.lines()
-                            .find(|line| line.starts_with("Name="))
-                            .and_then(|line| line.strip_prefix("Name="))
-                            .unwrap_or("Unknown").to_string();
+                        let name = parse_localized_name(&content);
                         let mut exec = content.lines()
                             .find(|line| line.starts_with("Exec="))
                             .and_then(|line| line.strip_prefix("Exec="))
                             .unwrap_or("").to_string();
+                        let icon_raw = content.lines()
+                            .find(|line| line.starts_with("Icon="))
+                            .and_then(|line| line.strip_prefix("Icon="))
+                            .unwrap_or("").trim().to_string();
                         // Strip desktop entry field codes like %U, %u, %f, %F etc.
                         for code in ["%U", "%u", "%F", "%f", "%i", "%c", "%k"].iter() {
                             exec = exec.replace(code, "");
@@ -208,7 +276,9 @@ fn get_recent_apps() -> Result<Vec<AppInfo>, String> {
                         if !name.is_empty() && !exec.is_empty() {
                             let base = std::path::Path::new(first).file_name().and_then(|s| s.to_str()).unwrap_or(first);
                             if !base.is_empty() && which(base) {
-                                apps.push(AppInfo { name, exec });
+                                let icon_path = resolve_icon_path(&icon_raw);
+                                let icon_data_url = icon_path.as_ref().and_then(|p| to_data_url(p));
+                                apps.push(AppInfo { name, exec, icon_data_url });
                             }
                         }
                     }

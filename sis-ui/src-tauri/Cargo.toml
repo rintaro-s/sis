@@ -29,6 +29,7 @@ mime_guess = "2"
 tauri-plugin-global-shortcut = "2"
 cfg-if = "1"
 dirs = "5"
+base64 = "0.22"
 
 [features]
 default = []

@@ -55,7 +55,7 @@ export type SystemInfo = {
   uploadSpeed: number
 }
 
-export type AppInfo = { name: string; exec?: string }
+export type AppInfo = { name: string; exec?: string; icon_data_url?: string }
 
 
 async function safeInvoke<T = unknown>(cmd: string, payload?: Record<string, unknown>): Promise<T> {
