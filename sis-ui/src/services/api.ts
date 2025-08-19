@@ -75,6 +75,10 @@ export const api = {
   return parsed
   },
 
+  async controlCenterState(): Promise<{ volume: number; brightness: number; network: boolean; bluetooth: boolean }>{
+    return await safeInvoke('control_center_state')
+  },
+
   async setVolume(volume: number): Promise<{ ok: boolean }> {
   try { await safeInvoke('set_volume', { volume }); return { ok: true } }
   catch { return { ok: false } }

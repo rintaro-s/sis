@@ -217,6 +217,12 @@ fn resolve_icon_path(raw: &str) -> Option<std::path::PathBuf> {
         }
         candidates.push(PathBuf::from(format!("/usr/share/icons/{theme}")));
     }
+    // Flatpak exports
+    if let Some(home) = dirs::home_dir() {
+        candidates.push(home.join(".local/share/flatpak/exports/share/icons"));
+    }
+    candidates.push(PathBuf::from("/var/lib/flatpak/exports/share/icons"));
+
     for base in candidates {
         // hicolor theme typical layout
         for size in &sizes {
@@ -271,6 +277,13 @@ fn get_recent_apps() -> Result<Vec<AppInfo>, String> {
                 let path = entry.path();
                 if path.is_file() && path.extension().map_or(false, |ext| ext == "desktop") {
                     if let Ok(content) = fs::read_to_string(&path) {
+                        // Skip hidden/NoDisplay entries and settings sub-panels
+                        let hidden = content.lines().any(|l| l.trim() == "Hidden=true")
+                            || content.lines().any(|l| l.trim() == "NoDisplay=true");
+                        if hidden { continue; }
+                        if content.lines().any(|l| l.starts_with("X-GNOME-Settings-Panel")) { continue; }
+                        if content.lines().any(|l| l.starts_with("Exec=gnome-control-center")) { continue; }
+                        if content.lines().any(|l| l.starts_with("Exec=xfce4-settings-manager")) && content.contains("--dialog") { continue; }
                         let name = parse_localized_name(&content);
                         let mut exec = content.lines()
                             .find(|line| line.starts_with("Exec="))
@@ -547,6 +560,7 @@ fn main() {
             overlay_start,
             overlay_stop,
             overlay_status,
+            control_center_state,
             // Newly added commands to expose via invoke
             network_set,
             bluetooth_set,
@@ -745,4 +759,70 @@ fn run_with_sudo(cmdline: String, password: String) -> Result<String, String> {
         }
         Err(e) => Err(format!("failed-waiting-for-sudo: {}", e)),
     }
+}
+
+fn read_network_enabled() -> bool {
+    match Command::new("nmcli").arg("networking").output() {
+        Ok(o) => String::from_utf8_lossy(&o.stdout).to_lowercase().contains("enabled"),
+        Err(_) => true,
+    }
+}
+
+fn read_bluetooth_enabled() -> bool {
+    // Prefer bluetoothctl show
+    if let Ok(o) = Command::new("bluetoothctl").arg("show").output() {
+        let s = String::from_utf8_lossy(&o.stdout).to_lowercase();
+        if s.contains("powered: yes") { return true; }
+        if s.contains("powered: no") { return false; }
+    }
+    // Fallback rfkill
+    match Command::new("rfkill").arg("list").arg("bluetooth").output() {
+        Ok(o) => {
+            let s = String::from_utf8_lossy(&o.stdout).to_lowercase();
+            !(s.contains("soft blocked: yes") || s.contains("hard blocked: yes"))
+        }
+        Err(_) => true,
+    }
+}
+
+fn read_volume_percent() -> u32 {
+    if let Ok(o) = Command::new("pactl").arg("get-sink-volume").arg("@DEFAULT_SINK@").output() {
+        let s = String::from_utf8_lossy(&o.stdout);
+        // find last occurrence of % digits
+        if let Some(idx) = s.rfind('%') {
+            let start = s[..idx].rfind(|c: char| !c.is_ascii_digit()).map(|i| i+1).unwrap_or(0);
+            let num = &s[start..idx];
+            if let Ok(v) = num.trim().parse::<u32>() { return v.min(150); }
+        }
+    }
+    50
+}
+
+fn read_brightness_percent() -> u32 {
+    // brightnessctl info shows (XX%) sometimes
+    if let Ok(o) = Command::new("brightnessctl").arg("info").output() {
+        let s = String::from_utf8_lossy(&o.stdout);
+        if let Some(p1) = s.find('(') { if let Some(p2) = s[p1+1..].find('%') { 
+            let num = &s[p1+1..p1+1+p2]; if let Ok(v) = num.trim().parse::<u32>() { return v.min(100); }
+        }}
+    }
+    // fallback xbacklight -get
+    if let Ok(o) = Command::new("xbacklight").arg("-get").output() {
+        let s = String::from_utf8_lossy(&o.stdout);
+        if let Ok(f) = s.trim().split_whitespace().next().unwrap_or("0").parse::<f32>() { return f.round() as u32; }
+    }
+    80
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ControlCenterState { volume: u32, brightness: u32, network: bool, bluetooth: bool }
+
+#[tauri::command]
+fn control_center_state() -> Result<ControlCenterState, String> {
+    Ok(ControlCenterState{
+        volume: read_volume_percent(),
+        brightness: read_brightness_percent(),
+        network: read_network_enabled(),
+        bluetooth: read_bluetooth_enabled(),
+    })
 }

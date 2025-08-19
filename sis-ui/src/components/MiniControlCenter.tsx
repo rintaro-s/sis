@@ -14,6 +14,12 @@ export default function MiniControlCenter({ open, onClose }: Props) {
     if (!open) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
+    ;(async ()=>{
+      try {
+        const s = await api.controlCenterState()
+        setVolume(s.volume); setBrightness(s.brightness); setNetwork(s.network); setBluetooth(s.bluetooth)
+      } catch {}
+    })()
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
@@ -27,33 +33,31 @@ export default function MiniControlCenter({ open, onClose }: Props) {
   return (
     <div className="cc-root" onClick={onClose}>
       <div className="cc-panel" onClick={(e)=>e.stopPropagation()}>
-        <div className="cc-title">コントロールセンター</div>
-        <div className="cc-row">
-          <span>音量</span>
-          <input type="range" min={0} max={100} value={volume} onChange={(e)=>applyVolume(Number(e.target.value))} />
-        </div>
-        <div className="cc-row">
-          <span>輝度</span>
-          <input type="range" min={0} max={100} value={brightness} onChange={(e)=>applyBrightness(Number(e.target.value))} />
-        </div>
-        <div className="cc-row">
-          <span>ネットワーク</span>
-          <label className="cc-switch">
-            <input type="checkbox" checked={network} onChange={toggleNetwork} />
-            <span />
-          </label>
-        </div>
-        <div className="cc-row">
-          <span>Bluetooth</span>
-          <label className="cc-switch">
-            <input type="checkbox" checked={bluetooth} onChange={toggleBluetooth} />
-            <span />
-          </label>
-        </div>
-        <div className="cc-actions">
-          <button onClick={()=>api.takeScreenshot()}>スクショ</button>
-          <button onClick={()=>api.playPauseMusic()}>⏯</button>
-          <button onClick={onClose}>閉じる</button>
+        <div className="cc-grid">
+          <div className="cc-tile wide">
+            <div className="cc-tile-title">音量</div>
+            <input type="range" min={0} max={100} value={volume} onChange={(e)=>applyVolume(Number(e.target.value))} />
+          </div>
+          <div className="cc-tile wide">
+            <div className="cc-tile-title">輝度</div>
+            <input type="range" min={0} max={100} value={brightness} onChange={(e)=>applyBrightness(Number(e.target.value))} />
+          </div>
+          <div className={`cc-tile ${network?'active':''}`} onClick={toggleNetwork}>
+            <div className="cc-tile-title">ネットワーク</div>
+            <div className="cc-tile-body">{network?'ON':'OFF'}</div>
+          </div>
+          <div className={`cc-tile ${bluetooth?'active':''}`} onClick={toggleBluetooth}>
+            <div className="cc-tile-title">Bluetooth</div>
+            <div className="cc-tile-body">{bluetooth?'ON':'OFF'}</div>
+          </div>
+          <div className="cc-tile" onClick={()=>api.takeScreenshot()}>
+            <div className="cc-tile-title">スクショ</div>
+            <div className="cc-tile-body">撮影</div>
+          </div>
+          <div className="cc-tile" onClick={()=>api.playPauseMusic()}>
+            <div className="cc-tile-title">ミュージック</div>
+            <div className="cc-tile-body">⏯</div>
+          </div>
         </div>
         <div className="cc-hint">Ctrl+Shift+C で開閉 / Escで閉じる</div>
       </div>
