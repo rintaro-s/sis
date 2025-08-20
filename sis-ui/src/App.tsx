@@ -95,7 +95,7 @@ function App() {
           {backendError} — 設定やコマンドは無効です。アプリ一覧は取得できません。
         </div>
       )}
-      <TopBar />
+  <TopBar onToggleControlCenter={() => setCcOpen((v)=>!v)} />
       <HomeScreen />
   <BottomBar />
   <HaloHud visible={hudOpen} onAction={(id)=>{

@@ -31,9 +31,9 @@ export default function MiniControlCenter({ open, onClose }: Props) {
   const toggleBluetooth = async () => { const b = !bluetooth; setBluetooth(b); const r = await api.bluetoothSet(b); if (!r.ok) alert('Bluetooth切替失敗') }
 
   return (
-    <div className="cc-root" onClick={onClose}>
-      <div className="cc-panel" onClick={(e)=>e.stopPropagation()}>
-        <div className="cc-grid">
+    <div className={`cc-anchor ${open ? 'open' : ''}`}>
+      <div className="cc-panel" role="dialog" aria-label="コントロールセンター">
+        <div className="cc-grid" aria-live="polite">
           <div className="cc-tile wide">
             <div className="cc-tile-title">音量</div>
             <input type="range" min={0} max={100} value={volume} onChange={(e)=>applyVolume(Number(e.target.value))} />

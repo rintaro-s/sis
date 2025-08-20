@@ -3,7 +3,9 @@ import { api } from '../services/api';
 import { IconSettings } from '../assets/icons';
 import './TopBar.css';
 
-function TopBar() {
+type Props = { onToggleControlCenter?: () => void }
+
+function TopBar({ onToggleControlCenter }: Props) {
   const [cpuUsage, setCpuUsage] = useState(0);
   const [memUsage, setMemUsage] = useState(0);
   const [downloadSpeed, setDownloadSpeed] = useState(0);
@@ -71,8 +73,9 @@ function TopBar() {
       </div>
       <div 
         className="notification-center"
-        onMouseEnter={() => setShowNotificationTooltip(true)}
-        onMouseLeave={() => setShowNotificationTooltip(false)}
+  onMouseEnter={() => setShowNotificationTooltip(true)}
+  onMouseLeave={() => setShowNotificationTooltip(false)}
+  onClick={() => onToggleControlCenter?.()}
       >
         <img src={IconSettings} alt="control-panel" />
         {showNotificationTooltip && (
