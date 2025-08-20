@@ -13,6 +13,7 @@ use cfg_if::cfg_if;
 use std::process::{Command, Stdio};
 use serde::{Serialize, Deserialize};
 use base64::Engine;
+use std::collections::{HashSet, VecDeque};
 
 struct NetworkStats {
     last_received_bytes: u64,
@@ -173,6 +174,65 @@ struct AppInfo {
     icon_data_url: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct LaunchHistoryEntry {
+    name: String,
+    exec: String,
+    icon_data_url: Option<String>,
+    last_launched: Option<u64>, // epoch seconds
+}
+
+fn history_dir() -> Option<PathBuf> {
+    dirs::home_dir().map(|h| h.join(".local").join("share").join("sis-ui"))
+}
+
+fn history_path() -> Option<PathBuf> {
+    history_dir().map(|d| d.join("launch_history.json"))
+}
+
+fn read_launch_history() -> Vec<LaunchHistoryEntry> {
+    if let Some(p) = history_path() {
+        if p.exists() {
+            if let Ok(s) = fs::read_to_string(p) {
+                if let Ok(v) = serde_json::from_str::<Vec<LaunchHistoryEntry>>(&s) {
+                    return v;
+                }
+            }
+        }
+    }
+    Vec::new()
+}
+
+fn write_launch_history(mut entries: Vec<LaunchHistoryEntry>) {
+    if let Some(dir) = history_dir() {
+        let _ = fs::create_dir_all(&dir);
+        if let Some(path) = history_path() {
+            // keep up to 200 recent unique entries
+            if entries.len() > 200 { entries.truncate(200); }
+            if let Ok(s) = serde_json::to_string_pretty(&entries) {
+                let _ = fs::write(path, s);
+            }
+        }
+    }
+}
+
+fn record_launch_from_exec(exec: &str, name_hint: Option<&str>, icon_data_url: Option<String>) {
+    let mut entries = read_launch_history();
+    let key = exec.trim().to_string();
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_secs());
+    // de-dup by exec
+    entries.retain(|e| e.exec != key);
+    let name = name_hint.map(|s| s.to_string()).unwrap_or_else(|| {
+        std::path::Path::new(&key)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(&key)
+            .to_string()
+    });
+    entries.insert(0, LaunchHistoryEntry{ name, exec: key, icon_data_url, last_launched: now});
+    write_launch_history(entries);
+}
+
 fn parse_localized_name(content: &str) -> String {
     // Prefer Name[ja], then Name[en], then Name
     let mut name: Option<String> = None;
@@ -268,7 +328,12 @@ fn get_recent_apps() -> Result<Vec<AppInfo>, String> {
     ];
     if let Some(home) = dirs::home_dir() {
         app_dirs.push(home.join(".local/share/applications"));
+        app_dirs.push(home.join(".local/share/flatpak/exports/share/applications"));
     }
+    // Flatpak system exports
+    app_dirs.push(PathBuf::from("/var/lib/flatpak/exports/share/applications"));
+    // Snap .desktop
+    app_dirs.push(PathBuf::from("/var/lib/snapd/desktop/applications"));
 
     for path in app_dirs.iter() {
         if path.exists() && path.is_dir() {
@@ -314,7 +379,59 @@ fn get_recent_apps() -> Result<Vec<AppInfo>, String> {
             }
         }
     }
+    // Merge AppImage candidates from common folders
+    if let Some(home) = dirs::home_dir() {
+        let mut extra = scan_appimages(&[home.join("Applications"), home.join("Downloads")]);
+        merge_apps(&mut apps, &mut extra);
+    }
+    // Merge launch history (includes once-opened AppImage etc.)
+    let mut hist = read_launch_history()
+        .into_iter()
+        .filter_map(|e| {
+            let exec_first = e.exec.split_whitespace().next().unwrap_or("").to_string();
+            // include only if executable still exists or command is resolvable
+            let p = Path::new(&exec_first);
+            if p.is_absolute() && p.exists() { Some(AppInfo { name: e.name, exec: e.exec, icon_data_url: e.icon_data_url }) }
+            else if which(&exec_first) { Some(AppInfo { name: e.name, exec: e.exec, icon_data_url: e.icon_data_url }) }
+            else { None }
+        })
+        .collect::<Vec<_>>();
+    merge_apps(&mut apps, &mut hist);
     Ok(apps)
+}
+
+fn merge_apps(dst: &mut Vec<AppInfo>, src: &mut Vec<AppInfo>) {
+    let mut seen: HashSet<String> = dst.iter().map(|a| a.exec.clone()).collect();
+    for a in src.drain(..) {
+        if !seen.contains(&a.exec) {
+            seen.insert(a.exec.clone());
+            dst.push(a);
+        }
+    }
+}
+
+fn scan_appimages(dirs: &[PathBuf]) -> Vec<AppInfo> {
+    let mut out = Vec::new();
+    for d in dirs {
+        if d.exists() && d.is_dir() {
+            if let Ok(read) = fs::read_dir(d) {
+                for e in read.flatten() {
+                    let p = e.path();
+                    if let Some(ext) = p.extension().and_then(|s| s.to_str()) {
+                        if ext.eq_ignore_ascii_case("AppImage") {
+                            let name = p.file_stem().and_then(|s| s.to_str()).unwrap_or("AppImage").to_string();
+                            let exec = p.to_string_lossy().to_string();
+                            // Try sibling icon (name.png/svg)
+                            let icon = p.with_extension("png");
+                            let icon_data_url = if icon.exists() { to_data_url(&icon) } else { None };
+                            out.push(AppInfo { name, exec, icon_data_url });
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -507,8 +624,13 @@ fn launch_app(exec: String) -> Result<String, String> {
         cmdline = cmdline.replace(code, "");
     }
     // Run via shell to support quoted args; spawn and detach
-    match Command::new("sh").arg("-c").arg(cmdline).spawn() {
-        Ok(_child) => Ok("launched".into()),
+    match Command::new("sh").arg("-c").arg(&cmdline).spawn() {
+        Ok(_child) => {
+            // best-effort: record into launch history
+            let name_hint = std::path::Path::new(cmdline.split_whitespace().next().unwrap_or("")).file_stem().and_then(|s| s.to_str());
+            record_launch_from_exec(&exec, name_hint, None);
+            Ok("launched".into())
+        },
         Err(e) => Err(format!("failed-to-launch: {}", e)),
     }
 }
