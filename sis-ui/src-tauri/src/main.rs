@@ -1381,9 +1381,4 @@ fn clear_backend_log() -> Result<String, String> {
     Ok("cleared".into())
 }
 
-fn expand_user_path(p: &str) -> PathBuf {
-    if p.starts_with("~/") {
-        if let Some(home) = dirs::home_dir() { return home.join(&p[2..]); }
-    }
-    PathBuf::from(p)
-}
+// expand_user_path is defined earlier
