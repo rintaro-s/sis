@@ -73,14 +73,15 @@ function TopBar({ onToggleControlCenter }: Props) {
       </div>
       <div 
         className="notification-center"
-  onMouseEnter={() => setShowNotificationTooltip(true)}
-  onMouseLeave={() => setShowNotificationTooltip(false)}
-  onClick={() => onToggleControlCenter?.()}
+        onMouseEnter={() => setShowNotificationTooltip(true)}
+        onMouseLeave={() => setShowNotificationTooltip(false)}
+        onClick={() => onToggleControlCenter?.()}
+        onDoubleClick={() => { window.dispatchEvent(new Event('sis:open-settings')) }}
       >
         <img src={IconSettings} alt="control-panel" />
-        {showNotificationTooltip && (
+    {showNotificationTooltip && (
           <div className="notification-tooltip">
-            制御パネル
+      制御パネル（ダブルクリックで設定 / Ctrl+, でも開く）
           </div>
         )}
       </div>

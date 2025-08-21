@@ -63,6 +63,13 @@ function Settings() {
     <div className="settings">
       <h3>設定</h3>
       <div className="setting-item">
+        <span>バックログ</span>
+        <label className="switch">
+          <input type="checkbox" checked={!!settings?.logging_enabled} onChange={(e)=>saveSettings({ logging_enabled: e.target.checked })} />
+          <span className="slider round"></span>
+        </label>
+      </div>
+      <div className="setting-item">
         <span>テーマ</span>
         <div className="theme-selector">
           <button className={`theme-button ${theme==='dark'?'active':''}`} onClick={()=>setTheme('dark')}>ダーク</button>

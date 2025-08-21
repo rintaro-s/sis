@@ -37,13 +37,28 @@ export default function CommandPalette() {
       { id: 'settings', label: '設定を開く' },
   { id: 'logs-backend', label: 'バックログ（BottomBarで表示）' },
     ]
-  const appItems = apps.filter((a) => a.exec && a.exec.trim() !== '').map((a) => ({ id: `app:${a.name}`, label: `起動: ${a.name}` }))
-    return [...staticItems, ...appItems].filter((it) => it.label.toLowerCase().includes(q.toLowerCase()))
+    const appItems = apps
+      .filter((a) => a.exec && a.exec.trim() !== '')
+      .map((a) => ({ id: `app:${a.name}`, label: `起動: ${a.name}` }))
+
+    // width-insensitive normalization and kana->romaji support
+    const norm = (s: string) => normalizeForSearch(s)
+    const nq = norm(q)
+
+    // Add simple synonyms for common static targets (e.g., 設定)
+    const withKeys = [...staticItems, ...appItems].map((it) => {
+      const base = norm(it.label)
+      const extra = /設定/.test(it.label) ? ' settei settings' : ''
+      return { ...it, _key: (base + extra).trim() }
+    })
+
+    return withKeys.filter((it) => it._key.includes(nq))
   }, [q, apps])
 
   const run = async (id: string) => {
     if (id === 'screenshot') await api.takeScreenshot()
     if (id === 'music-play') await api.playPauseMusic()
+  if (id === 'settings') { window.dispatchEvent(new Event('sis:open-settings')); setOpen(false); return }
   if (id === 'logs-backend') { alert('下部バーの🧾Bアイコンから開けます'); return }
     if (id === 'overlay-toggle') {
       const running = await api.overlayStatus()
@@ -128,4 +143,34 @@ export default function CommandPalette() {
       </div>
     </div>
   )
+}
+
+// simple width-insensitive normalize + kana->romaji
+function normalizeForSearch(input: string): string {
+  const s = (input || '').normalize('NFKC').toLowerCase()
+  // Hiragana to romaji (very small mapping sufficient for typical queries)
+  const map: Record<string, string> = {
+    'あ':'a','い':'i','う':'u','え':'e','お':'o',
+    'か':'ka','き':'ki','く':'ku','け':'ke','こ':'ko',
+    'さ':'sa','し':'shi','す':'su','せ':'se','そ':'so',
+    'た':'ta','ち':'chi','つ':'tsu','て':'te','と':'to',
+    'な':'na','に':'ni','ぬ':'nu','ね':'ne','の':'no',
+    'は':'ha','ひ':'hi','ふ':'fu','へ':'he','ほ':'ho',
+    'ま':'ma','み':'mi','む':'mu','め':'me','も':'mo',
+    'や':'ya','ゆ':'yu','よ':'yo',
+    'ら':'ra','り':'ri','る':'ru','れ':'re','ろ':'ro',
+    'わ':'wa','ゐ':'wi','ゑ':'we','を':'wo','ん':'n',
+    'が':'ga','ぎ':'gi','ぐ':'gu','げ':'ge','ご':'go',
+    'ざ':'za','じ':'ji','ず':'zu','ぜ':'ze','ぞ':'zo',
+    'だ':'da','ぢ':'ji','づ':'du','で':'de','ど':'do',
+    'ば':'ba','び':'bi','ぶ':'bu','べ':'be','ぼ':'bo',
+    'ぱ':'pa','ぴ':'pi','ぷ':'pu','ぺ':'pe','ぽ':'po',
+    'ぁ':'a','ぃ':'i','ぅ':'u','ぇ':'e','ぉ':'o',
+    'ゃ':'ya','ゅ':'yu','ょ':'yo','っ':'',
+  }
+  let out = ''
+  for (const ch of s) {
+    out += map[ch] ?? ch
+  }
+  return out
 }

@@ -33,10 +33,19 @@ function AppStore() {
     if (!r.ok) alert(`${app.name} を起動できません`)
   }
 
+  const dedupe = (list: AppInfo[]) => {
+    const m = new Map<string, AppInfo>()
+    for (const a of list) {
+      const key = `${a.name}::${a.exec || ''}`
+      if (!m.has(key)) m.set(key, a)
+    }
+    return Array.from(m.values())
+  }
   const bySort = (list: AppInfo[]) => {
-    if (sort==='name') return [...list].sort((a,b)=>a.name.localeCompare(b.name))
-    if (sort==='recent') return list // getRecentAppsは既に近い順想定
-    return list
+    const xs = dedupe(list)
+    if (sort==='name') return [...xs].sort((a,b)=>a.name.localeCompare(b.name))
+    if (sort==='recent') return xs // getRecentAppsは既に近い順想定
+    return xs
   }
   const visible = bySort(showAll ? apps : apps.filter(a => !!a.icon_data_url))
 

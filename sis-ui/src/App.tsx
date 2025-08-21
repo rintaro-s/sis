@@ -10,11 +10,13 @@ import CommandPalette from './components/CommandPalette';
 import './App.css';
 import { api } from './services/api';
 import MiniControlCenter from './components/MiniControlCenter.tsx';
+import Settings from './components/Settings';
 
 function App() {
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const [hudOpen, setHudOpen] = useState(false);
   const [ccOpen, setCcOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [backendError, setBackendError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -23,7 +25,7 @@ function App() {
     });
 
     // Alt+Space でランチャー（フォールバック）
-    const onKey = (e: KeyboardEvent) => {
+  const onKey = (e: KeyboardEvent) => {
       if (e.altKey && e.code === 'Space') {
         e.preventDefault();
         setIsMenuVisible((p) => !p);
@@ -40,18 +42,27 @@ function App() {
         e.preventDefault();
         setCcOpen((v)=>!v)
       }
+      // Ctrl+, で設定を開く
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        setSettingsOpen(true)
+      }
       // Esc でHUD/メニューを閉じる
       // Escで閉じる
       if (e.code === 'Escape') {
         setIsMenuVisible(false);
         setHudOpen(false);
+        setSettingsOpen(false);
       }
     };
     window.addEventListener('keydown', onKey);
+    const openSettings = () => setSettingsOpen(true)
+    window.addEventListener('sis:open-settings', openSettings as any)
 
     return () => {
       unlisten.then((f: () => void) => f());
       window.removeEventListener('keydown', onKey);
+      window.removeEventListener('sis:open-settings', openSettings as any)
     };
   }, []);
 
@@ -113,6 +124,17 @@ function App() {
         isVisible={isMenuVisible} 
         onClose={handleMenuClose}
       />
+      {settingsOpen && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex: 1000 }} onClick={()=>setSettingsOpen(false)}>
+          <div style={{ position:'absolute', top:'8%', left:'50%', transform:'translateX(-50%)', width:'min(980px, 92vw)', maxHeight:'84vh', overflow:'auto', background:'rgba(12,18,28,0.9)', border:'1px solid #2b3c51', borderRadius:12, boxShadow:'0 12px 50px rgba(0,0,0,0.45)', padding:16 }} onClick={(e)=>e.stopPropagation()}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+              <h3 style={{ margin:0 }}>設定</h3>
+              <button onClick={()=>setSettingsOpen(false)}>閉じる</button>
+            </div>
+            <Settings />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

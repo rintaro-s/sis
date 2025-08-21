@@ -1268,6 +1268,7 @@ struct DeSettings {
     user_dirs: Option<serde_json::Value>, // { downloads, music, pictures, documents, videos, desktop }
     app_sort: Option<String>, // name|recent
     favorite_order: Option<Vec<String>>, // favorite app names
+    logging_enabled: Option<bool>,
 }
 
 fn settings_dir() -> Option<PathBuf> { history_dir() }
@@ -1291,7 +1292,8 @@ fn read_settings() -> DeSettings {
         local_model_path: None,
         user_dirs: None,
         app_sort: Some("name".into()),
-        favorite_order: None 
+    favorite_order: None,
+    logging_enabled: Some(false),
     }
 }
 
@@ -1350,6 +1352,9 @@ fn logs_dir() -> Option<PathBuf> { history_dir().map(|d| d.join("logs")) }
 fn backend_log_path() -> Option<PathBuf> { logs_dir().map(|d| d.join("backend.log")) }
 
 fn log_append(level: &str, message: &str) {
+    // Check settings toggle
+    let s = read_settings();
+    if !s.logging_enabled.unwrap_or(false) { return; }
     if let Some(dir) = logs_dir() { let _ = fs::create_dir_all(&dir); }
     if let Some(path) = backend_log_path() {
         let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
