@@ -8,6 +8,19 @@ function Settings() {
   const [brightness, setBrightness] = useState(80)
   const [network, setNetwork] = useState(true)
   const [bluetooth, setBluetooth] = useState(true)
+  const [logPanelOpen, setLogPanelOpen] = useState<null | 'backend' | 'frontend'>(null)
+  const [backendLog, setBackendLog] = useState('')
+
+  useEffect(() => {
+    // preload control center state
+    api.controlCenterState().then((s) => {
+      if (!s) return
+      if (typeof s.volume === 'number') setVolume(s.volume)
+      if (typeof s.brightness === 'number') setBrightness(s.brightness)
+      if (typeof s.network === 'boolean') setNetwork(s.network)
+      if (typeof s.bluetooth === 'boolean') setBluetooth(s.bluetooth)
+    }).catch(()=>{})
+  }, [])
 
   const applyVolume = async (v: number) => {
     setVolume(v)
@@ -36,11 +49,9 @@ function Settings() {
     if (!r.ok) alert('電源操作に失敗しました')
   }
 
-  // simple theme switch using data-theme on body
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
-  useEffect(() => {
-    document.body.dataset.theme = theme
-  }, [theme])
+  // theme selector (no auto-force on open)
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => (document.body.dataset.theme as any) || 'dark')
+  useEffect(() => { document.body.dataset.theme = theme }, [theme])
   // LLM / 設定ストレージ
   const [settings, setSettings] = useState<any | null>(null)
   const [advOpen, setAdvOpen] = useState(false)
@@ -78,24 +89,24 @@ function Settings() {
       </div>
       <div className="setting-item">
         <span>音量</span>
-        <input type="range" min="0" max="100" value={volume} className="slider" onChange={(e) => applyVolume(Number(e.target.value))} />
+  <input type="range" min="0" max="100" value={volume} className="range-slider" onChange={(e) => applyVolume(Number(e.target.value))} />
       </div>
       <div className="setting-item">
         <span>輝度</span>
-        <input type="range" min="0" max="100" value={brightness} className="slider" onChange={(e) => applyBrightness(Number(e.target.value))} />
+  <input type="range" min="0" max="100" value={brightness} className="range-slider" onChange={(e) => applyBrightness(Number(e.target.value))} />
       </div>
       <div className="setting-item">
         <span>ネットワーク</span>
         <label className="switch">
           <input type="checkbox" checked={network} onChange={toggleNetwork} />
-          <span className="slider round"></span>
+          <span className="toggle-slider"></span>
         </label>
       </div>
       <div className="setting-item">
         <span>Bluetooth</span>
         <label className="switch">
           <input type="checkbox" checked={bluetooth} onChange={toggleBluetooth} />
-          <span className="slider round"></span>
+          <span className="toggle-slider"></span>
         </label>
       </div>
       <div className="setting-item">
@@ -142,7 +153,7 @@ function Settings() {
                 <label>localhostなら自動起動</label>
                 <label className="switch">
                   <input type="checkbox" checked={!!settings?.llm_autostart_localhost} onChange={(e)=>saveSettings({ llm_autostart_localhost: e.target.checked })} />
-                  <span className="slider round"></span>
+                  <span className="toggle-slider"></span>
                 </label>
                 <div></div>
                 <button className="theme-button" onClick={async()=>{ const r = await api.tryStartLmStudio(); alert(r.message||'') }}>LM Studio 起動</button>
@@ -181,6 +192,32 @@ function Settings() {
           <button className="theme-button" onClick={() => power('shutdown')}>シャットダウン</button>
         </div>
       </div>
+
+      <div className="setting-item">
+        <span>ログ</span>
+        <div className="theme-selector" style={{ gap: 8 }}>
+          <button className="theme-button" onClick={async()=>{ setLogPanelOpen('backend'); setBackendLog(await api.getBackendLog(500)); }}>バックエンド</button>
+          <button className="theme-button" onClick={()=> setLogPanelOpen('frontend') }>フロントエンド</button>
+        </div>
+      </div>
+
+      {logPanelOpen && (
+        <div style={{ marginTop: 10, textAlign:'left' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+            <div style={{ fontSize: 13, opacity:.9 }}>{logPanelOpen==='backend'?'バックエンドログ（最新 約500行）':'フロントログ（直近出力）'}</div>
+            <div style={{ display:'flex', gap:8 }}>
+              {logPanelOpen==='backend' && (<>
+                <button onClick={async()=>setBackendLog(await api.getBackendLog(500))}>再読込</button>
+                <button onClick={async()=>{ await api.clearBackendLog(); setBackendLog(''); }}>消去</button>
+              </>)}
+              <button onClick={()=>setLogPanelOpen(null)}>閉じる</button>
+            </div>
+          </div>
+          <pre style={{ whiteSpace:'pre-wrap', color:'#cfe6ff', fontSize:12, maxHeight: 260, overflow:'auto', margin:0, background:'rgba(0,0,0,0.25)', padding:8, borderRadius:8 }}>
+            {logPanelOpen==='backend' ? backendLog : '(直近のAI/コマンド出力をここに表示します)'}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }

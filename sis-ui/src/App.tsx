@@ -5,7 +5,6 @@ import TopBar from './components/TopBar';
 import BottomBar from './components/BottomBar';
 import HomeScreen from './components/HomeScreen';
 import CircularMenu from './components/CircularMenu';
-import HaloHud from './components/HaloHud';
 import CommandPalette from './components/CommandPalette';
 import './App.css';
 import { api } from './services/api';
@@ -14,7 +13,7 @@ import Settings from './components/Settings';
 
 function App() {
   const [isMenuVisible, setIsMenuVisible] = useState(false);
-  const [hudOpen, setHudOpen] = useState(false);
+  // Halo HUD removed per user request
   const [ccOpen, setCcOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [backendError, setBackendError] = useState<string | null>(null);
@@ -30,13 +29,7 @@ function App() {
         e.preventDefault();
         setIsMenuVisible((p) => !p);
       }
-      // Ctrl+Alt+Z または Meta(Super)+Z で Halo HUD トグル
-      const isCtrlAltZ = e.ctrlKey && e.altKey && e.key.toLowerCase() === 'z'
-      const isMetaZ = (e.metaKey || (e as any).superKey) && e.key.toLowerCase() === 'z'
-      if (isCtrlAltZ || isMetaZ) {
-        e.preventDefault();
-        setHudOpen((v) => !v)
-      }
+  // Halo HUD hotkey removed
       // Ctrl+Shift+C でコントロールセンター
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
         e.preventDefault();
@@ -51,7 +44,7 @@ function App() {
       // Escで閉じる
       if (e.code === 'Escape') {
         setIsMenuVisible(false);
-        setHudOpen(false);
+  //
         setSettingsOpen(false);
       }
     };
@@ -109,15 +102,7 @@ function App() {
   <TopBar onToggleControlCenter={() => setCcOpen((v)=>!v)} />
       <HomeScreen />
   <BottomBar />
-  <HaloHud visible={hudOpen} onAction={(id)=>{
-    // map actions
-    if (id==='launcher') setIsMenuVisible(true)
-    if (id==='files') api.organizeLatestDownload()
-    if (id==='music') api.playPauseMusic()
-    if (id==='volume') setCcOpen(true)
-    if (id==='screen') api.takeScreenshot()
-    if (id==='control') setCcOpen(true)
-  }} onClose={()=>setHudOpen(false)} />
+  {/* Halo HUD removed */}
   <MiniControlCenter open={ccOpen} onClose={()=>setCcOpen(false)} />
   <CommandPalette />
       <CircularMenu 

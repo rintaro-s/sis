@@ -33,9 +33,8 @@ export default function CommandPalette() {
       { id: 'launcher', label: 'アプリランチャーを開く (Alt+Space)' },
       { id: 'screenshot', label: 'スクリーンショットを撮る' },
       { id: 'music-play', label: '音楽 再生/一時停止' },
-      { id: 'overlay-toggle', label: 'Raylibオーバーレイ 切替' },
       { id: 'settings', label: '設定を開く' },
-  { id: 'logs-backend', label: 'バックログ（BottomBarで表示）' },
+      { id: 'logs-backend', label: 'バックログ（設定→ログ）' },
     ]
     const appItems = apps
       .filter((a) => a.exec && a.exec.trim() !== '')
@@ -59,12 +58,7 @@ export default function CommandPalette() {
     if (id === 'screenshot') await api.takeScreenshot()
     if (id === 'music-play') await api.playPauseMusic()
   if (id === 'settings') { window.dispatchEvent(new Event('sis:open-settings')); setOpen(false); return }
-  if (id === 'logs-backend') { alert('下部バーの🧾Bアイコンから開けます'); return }
-    if (id === 'overlay-toggle') {
-      const running = await api.overlayStatus()
-      if (running) await api.overlayStop()
-      else await api.overlayStart()
-    }
+  if (id === 'logs-backend') { alert('設定→ログから表示できます'); return }
     if (id.startsWith('app:')) {
       const name = id.slice(4)
       const app = apps.find((a) => a.name === name)

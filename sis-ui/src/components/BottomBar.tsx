@@ -10,8 +10,7 @@ function BottomBar() {
   const [sudoPrompt, setSudoPrompt] = useState<{cmd: string} | null>(null);
   const [sudoPassword, setSudoPassword] = useState('');
   const [settings, setSettings] = useState<any | null>(null)
-  const [showLogs, setShowLogs] = useState<null | 'backend' | 'frontend'>(null)
-  const [backendLog, setBackendLog] = useState('')
+  // logs moved to Settings
 
   useEffect(() => { api.getSettings().then(setSettings) }, [])
 
@@ -140,8 +139,7 @@ function BottomBar() {
           <div className="status-dot"></div>
           <span className="status-text">{busy ? 'BUSY' : 'ONLINE'}</span>
         </div>
-  <button type="button" title="バックログ" className="send-button" onClick={async()=>{ setShowLogs('backend'); setBackendLog(await api.getBackendLog(500)); }}>🧾B</button>
-  <button type="button" title="フロントログ" className="send-button" onClick={()=>{ setShowLogs('frontend') }}>🧾F</button>
+  {/* logs moved to Settings */}
         <button type="button" title="Push-To-Talk (長押しで録音)" className="send-button" onMouseDown={() => console.log('PTT start')} onMouseUp={() => console.log('PTT stop')}>
           🎤
         </button>
@@ -168,23 +166,7 @@ function BottomBar() {
           <button onClick={() => { setSudoPrompt(null); setSudoPassword(''); }}>キャンセル</button>
         </div>
       )}
-      {showLogs && (
-        <div style={{ position: 'absolute', left: 16, right: 16, bottom: 160, top: 60, background: 'rgba(0,0,0,0.7)', border: '1px solid #345', borderRadius: 8, padding: 8 }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-            <div style={{ color:'#cfe6ff' }}>{showLogs==='backend'?'バックログ（最新 約500行）':'フロントログ（直近出力）'}</div>
-            <div style={{ display:'flex', gap:8 }}>
-              {showLogs==='backend' && (<>
-                <button onClick={async()=>setBackendLog(await api.getBackendLog(500))}>再読込</button>
-                <button onClick={async()=>{ await api.clearBackendLog(); setBackendLog(''); }}>消去</button>
-              </>)}
-              <button onClick={()=>setShowLogs(null)}>閉じる</button>
-            </div>
-          </div>
-          <pre style={{ whiteSpace:'pre-wrap', color:'#cfe6ff', fontSize:12, height:'100%', overflow:'auto', margin:0 }}>
-            {showLogs==='backend' ? backendLog : (output || '(直近のAI/コマンド出力をここに表示します)')}
-          </pre>
-        </div>
-      )}
+  {/* logs overlay removed from footer */}
     </div>
   );
 }
