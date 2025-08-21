@@ -106,8 +106,26 @@ export const api = {
     try { return await safeInvoke('list_desktop_items') } catch { return [] }
   },
 
+  async listDocumentsItems(): Promise<{ name: string; path: string; is_dir: boolean }[]> {
+    try { return await safeInvoke('list_documents_items') } catch { return [] }
+  },
+
   async setWallpaper(path: string): Promise<{ ok: boolean; message?: string }>{
     try { const msg = await safeInvoke<string>('set_wallpaper', { path }); return { ok: true, message: msg } }
+    catch (e) { return { ok: false, message: (e as Error)?.message } }
+  },
+
+  async getSettings(): Promise<any> { try { return await safeInvoke('get_settings') } catch { return {} } },
+  async setSettings(s: any): Promise<{ ok: boolean; message?: string }>{
+    try { const msg = await safeInvoke<string>('set_settings', { new_s: s }); return { ok: true, message: msg } }
+    catch (e) { return { ok: false, message: (e as Error)?.message } }
+  },
+  async tryStartLmStudio(): Promise<{ ok: boolean; message?: string }>{
+    try { const msg = await safeInvoke<string>('try_start_lmstudio'); return { ok: true, message: msg } }
+    catch (e) { return { ok: false, message: (e as Error)?.message } }
+  },
+  async reorderFavoriteApps(names: string[]): Promise<{ ok: boolean; message?: string }>{
+    try { const msg = await safeInvoke<string>('reorder_favorite_apps', { names }); return { ok: true, message: msg } }
     catch (e) { return { ok: false, message: (e as Error)?.message } }
   },
 
@@ -249,6 +267,20 @@ export const api = {
     }
   },
 
+  async llmDownloadHf(modelId: string): Promise<{ ok: boolean; path?: string; message?: string }>{
+    try {
+      const path = await safeInvoke<string>('llm_download_hf', { modelId })
+      return { ok: true, path }
+    } catch (e) {
+      return { ok: false, message: (e as Error)?.message }
+    }
+  },
+
+  async listLocalModels(): Promise<string[]>{
+    try { return await safeInvoke<string[]>('list_local_models') }
+    catch { return [] }
+  },
+
   async runSafeCommand(cmdline: string): Promise<{ ok: boolean; text?: string; message?: string }> {
     try {
       const text = await safeInvoke<string>('run_safe_command', { cmdline })
@@ -274,6 +306,13 @@ export const api = {
     } catch (e) {
       return { ok: false, message: (e as Error)?.message }
     }
+  },
+
+  async getBackendLog(limit?: number): Promise<string> {
+    try { return await safeInvoke<string>('get_backend_log', { limit }) } catch { return '' }
+  },
+  async clearBackendLog(): Promise<{ ok: boolean; message?: string }> {
+    try { const msg = await safeInvoke<string>('clear_backend_log'); return { ok: true, message: msg } } catch (e) { return { ok: false, message: (e as Error)?.message } }
   },
 
   async runWithSudo(cmdline: string, password: string): Promise<{ ok: boolean; text?: string; message?: string }> {

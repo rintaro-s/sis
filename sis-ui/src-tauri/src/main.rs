@@ -17,6 +17,7 @@ use serde_json;
 use std::collections::{HashSet, VecDeque};
 use serde_json::json;
 use std::env;
+use std::io::Write as _;
 
 struct NetworkStats {
     last_received_bytes: u64,
@@ -692,10 +693,15 @@ fn main() {
             get_launch_history,
             get_folder_counts,
             list_desktop_items,
+            list_documents_items,
             set_wallpaper,
+            get_settings,
+            set_settings,
+            try_start_lmstudio,
             get_favorite_apps,
             add_favorite_app,
             remove_favorite_app,
+            reorder_favorite_apps,
             take_screenshot,
             play_pause_music,
             next_track,
@@ -711,6 +717,8 @@ fn main() {
             power_action,
             llm_query,
             llm_query_remote,
+            llm_download_hf,
+            list_local_models,
             run_safe_command,
             run_with_sudo,
             clamav_scan,
@@ -796,22 +804,81 @@ fn power_action(action: String) -> Result<String, String> {
 
 #[tauri::command]
 fn llm_query(prompt: String) -> Result<String, String> {
-    // Expect model at ./LLM/gemma-3-12b-it-Q4_K_M.gguf and a local runner binary at ./LLM/llama_server
-    let model = PathBuf::from("LLM/gemma-3-12b-it-Q4_K_M.gguf");
-    if !model.exists() {
-        return Err("model-not-found: place gemma-3-12b-it-Q4_K_M.gguf in ./LLM".into());
+    log_append("INFO", &format!("llm_query(local) prompt_len={}", prompt.len().min(2048)));
+    let s = read_settings();
+    if s.llm_mode.as_deref() != Some("local") {
+        log_append("WARN", "llm_query called but local mode is not enabled");
+        return Err("llm-local-mode-not-enabled".into());
     }
+    let model_path = s.local_model_path.clone().ok_or_else(|| "local-model-path-not-set".to_string())?;
+    let model = PathBuf::from(model_path);
+    if !model.exists() { log_append("ERROR", "local model path not found"); return Err("local-model-not-found".into()); }
     let runner = PathBuf::from("LLM/llama_server");
-    if !runner.exists() {
-        return Err("llama_server-not-found: put a compatible local runner binary at ./LLM/llama_server".into());
-    }
+    if !runner.exists() { log_append("ERROR", "llama_server binary missing"); return Err("llama_server-not-found: put binary at ./LLM/llama_server".into()); }
     match Command::new(runner).arg("--model").arg(model).arg("--prompt").arg(prompt).output() {
         Ok(o) => {
-            if o.status.success() { Ok(String::from_utf8_lossy(&o.stdout).to_string()) }
-            else { Err(format!("llm-error: {}", String::from_utf8_lossy(&o.stderr))) }
+            if o.status.success() {
+                let resp = String::from_utf8_lossy(&o.stdout).to_string();
+                log_append("INFO", &format!("llm_query(local) ok bytes={}", resp.len()));
+                Ok(resp)
+            } else {
+                let err = String::from_utf8_lossy(&o.stderr).to_string();
+                log_append("ERROR", &format!("llm_query(local) failed: {}", err));
+                Err(format!("llm-error: {}", err))
+            }
         }
-        Err(e) => Err(format!("failed-to-start-llm-runner: {}", e)),
+        Err(e) => { log_append("ERROR", &format!("llm runner spawn failed: {}", e)); Err(format!("failed-to-start-llm-runner: {}", e)) }
     }
+}
+
+fn models_dir() -> Option<PathBuf> { history_dir().map(|d| d.join("models")) }
+
+fn sanitize_model_id(mid: &str) -> String {
+    mid.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect()
+}
+
+#[tauri::command]
+fn llm_download_hf(model_id: String) -> Result<String, String> {
+    if !which("huggingface-cli") { return Err("huggingface-cli-not-found".into()); }
+    let dir = models_dir().ok_or_else(|| "home-not-found".to_string())?;
+    let _ = fs::create_dir_all(&dir);
+    let target = dir.join(sanitize_model_id(&model_id));
+    let target_str = target.to_string_lossy().to_string();
+    let status = Command::new("huggingface-cli")
+        .arg("download")
+        .arg(&model_id)
+        .arg("--local-dir").arg(&target_str)
+        .status();
+    match status {
+        Ok(s) if s.success() => Ok(target_str),
+        Ok(s) => Err(format!("download-failed: exit {}", s)),
+        Err(e) => Err(format!("failed-to-run-hf-cli: {}", e))
+    }
+}
+
+#[tauri::command]
+fn list_local_models() -> Result<Vec<String>, String> {
+    let mut out = Vec::new();
+    if let Some(d) = models_dir() {
+        if d.exists() {
+            if let Ok(read) = fs::read_dir(&d) {
+                for e in read.flatten() {
+                    let p = e.path();
+                    if p.is_dir() {
+                        if let Ok(r2) = fs::read_dir(&p) {
+                            for f in r2.flatten() {
+                                let fp = f.path();
+                                if let Some(ext) = fp.extension().and_then(|s| s.to_str()) {
+                                    if ext.eq_ignore_ascii_case("gguf") { out.push(fp.to_string_lossy().to_string()); }
+                                }
+                            }
+                        }
+                    } else if let Some(ext) = p.extension().and_then(|s| s.to_str()) { if ext.eq_ignore_ascii_case("gguf") { out.push(p.to_string_lossy().to_string()); } }
+                }
+            }
+        }
+    }
+    Ok(out)
 }
 
 fn which(cmd: &str) -> bool {
@@ -823,8 +890,19 @@ fn which(cmd: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn expand_user_path(input: &str) -> PathBuf {
+    let s = input.trim();
+    if s.starts_with("~/") {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(&s[2..]);
+        }
+    }
+    PathBuf::from(s)
+}
+
 #[tauri::command]
 fn run_safe_command(cmdline: String) -> Result<String, String> {
+    if cmdline.len() > 8000 { return Err("command-too-long".into()); }
     let trimmed = cmdline.trim();
     if trimmed.is_empty() { return Err("empty-cmd".into()); }
     // allowlist simple guard
@@ -839,12 +917,20 @@ fn run_safe_command(cmdline: String) -> Result<String, String> {
     if trimmed.contains(" rm ") || trimmed.starts_with("rm ") || trimmed.contains(" sudo ") {
         return Err("unsafe-command-rejected".into());
     }
+    log_append("INFO", &format!("run_safe_command: {}", trimmed));
     match Command::new("sh").arg("-c").arg(trimmed).output() {
         Ok(o) => {
-            if o.status.success() { Ok(String::from_utf8_lossy(&o.stdout).to_string()) }
-            else { Err(String::from_utf8_lossy(&o.stderr).to_string()) }
+            if o.status.success() {
+                let out = String::from_utf8_lossy(&o.stdout).to_string();
+                log_append("INFO", &format!("run_safe_command ok bytes={}", out.len()));
+                Ok(out)
+            } else {
+                let err = String::from_utf8_lossy(&o.stderr).to_string();
+                log_append("ERROR", &format!("run_safe_command failed: {}", err));
+                Err(err)
+            }
         }
-        Err(e) => Err(format!("failed-to-run: {}", e))
+        Err(e) => { log_append("ERROR", &format!("run_safe_command spawn error: {}", e)); Err(format!("failed-to-run: {}", e)) }
     }
 }
 
@@ -868,6 +954,7 @@ fn kdeconnect_list() -> Result<String, String> {
 
 #[tauri::command]
 fn run_with_sudo(cmdline: String, password: String) -> Result<String, String> {
+    if cmdline.len() > 8000 { return Err("command-too-long".into()); }
     // Very small wrapper to run a single command with sudo by providing the password via stdin.
     // Note: This is convenient but has security implications; prefer polkit or proper privilege separation in production.
     let trimmed = cmdline.trim();
@@ -897,12 +984,16 @@ fn run_with_sudo(cmdline: String, password: String) -> Result<String, String> {
     match child.wait_with_output() {
         Ok(out) => {
             if out.status.success() {
-                Ok(String::from_utf8_lossy(&out.stdout).to_string())
+                let s = String::from_utf8_lossy(&out.stdout).to_string();
+                log_append("INFO", &format!("run_with_sudo ok bytes={}", s.len()));
+                Ok(s)
             } else {
-                Err(String::from_utf8_lossy(&out.stderr).to_string())
+                let e = String::from_utf8_lossy(&out.stderr).to_string();
+                log_append("ERROR", &format!("run_with_sudo failed: {}", e));
+                Err(e)
             }
         }
-        Err(e) => Err(format!("failed-waiting-for-sudo: {}", e)),
+        Err(e) => { log_append("ERROR", &format!("wait sudo failed: {}", e)); Err(format!("failed-waiting-for-sudo: {}", e)) }
     }
 }
 
@@ -991,6 +1082,8 @@ fn get_launch_history(limit: Option<u32>) -> Result<Vec<AppInfo>, String> {
 
 #[tauri::command]
 fn llm_query_remote(base_url: String, api_key: Option<String>, model: Option<String>, prompt: String) -> Result<String, String> {
+    let safe_url = if base_url.contains("localhost") { base_url.clone() } else { "(redacted)".into() };
+    log_append("INFO", &format!("llm_query_remote url={} prompt_len={}", safe_url, prompt.len().min(2048)));
     let url = base_url;
     let model_name = model.unwrap_or_else(|| "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF".to_string());
     let body = json!({
@@ -998,7 +1091,9 @@ fn llm_query_remote(base_url: String, api_key: Option<String>, model: Option<Str
         "messages": [ { "role": "user", "content": prompt } ],
         "temperature": 0.7
     });
-    let client = match reqwest::blocking::Client::builder().timeout(std::time::Duration::from_secs(30)).build() {
+    let client = match reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build() {
         Ok(c) => c,
         Err(e) => return Err(format!("llm-client-error: {}", e)),
     };
@@ -1007,21 +1102,26 @@ fn llm_query_remote(base_url: String, api_key: Option<String>, model: Option<Str
     match req.send() {
         Ok(resp) => {
             if resp.status().is_success() {
-                match resp.json::<serde_json::Value>() {
+                // cap payload size to avoid memory spike
+                let val = match resp.json::<serde_json::Value>() {
                     Ok(v) => {
                         if let Some(text) = v["choices"][0]["message"]["content"].as_str() {
-                            Ok(text.to_string())
+                            let s = text.to_string(); log_append("INFO", &format!("llm_query_remote ok len={}", s.len())); Ok(s)
                         } else if let Some(text) = v["choices"][0]["text"].as_str() {
-                            Ok(text.to_string())
-                        } else { Ok(v.to_string()) }
+                            let s = text.to_string(); log_append("INFO", &format!("llm_query_remote ok len={}", s.len())); Ok(s)
+                        } else { let s = v.to_string(); log_append("INFO", &format!("llm_query_remote ok/raw len={}", s.len())); Ok(s) }
                     }
-                    Err(e) => Err(format!("llm-invalid-json: {}", e))
-                }
+                    Err(e) => { log_append("ERROR", &format!("llm invalid json: {}", e)); Err(format!("llm-invalid-json: {}", e)) }
+                }?;
+                Ok(val)
             } else {
-                Err(format!("llm-http-{}: {}", resp.status(), resp.text().unwrap_or_default()))
+                let st = resp.status();
+                let txt = resp.text().unwrap_or_default();
+                log_append("ERROR", &format!("llm http error {}: {}", st, txt.chars().take(512).collect::<String>()));
+                Err(format!("llm-http-{}: {}", st, txt))
             }
         }
-        Err(e) => Err(format!("llm-http-error: {}", e))
+        Err(e) => { log_append("ERROR", &format!("llm http send error: {}", e)); Err(format!("llm-http-error: {}", e)) }
     }
 }
 
@@ -1030,6 +1130,13 @@ struct DesktopItem { name: String, path: String, is_dir: bool }
 
 fn desktop_dirs() -> Vec<PathBuf> {
     let mut out = Vec::new();
+    // Prefer user-configured path if provided
+    if let Some(s) = Some(read_settings()) { if let Some(ud) = s.user_dirs.as_ref() {
+        if let Some(v) = ud.get("desktop").and_then(|x| x.as_str()) {
+            let p = expand_user_path(v);
+            if p.exists() { out.push(p); }
+        }
+    }}
     if let Some(home) = dirs::home_dir() {
         out.push(home.join("Desktop"));
         out.push(home.join("デスクトップ"));
@@ -1100,4 +1207,183 @@ fn set_wallpaper(path: String) -> Result<String, String> {
         if status.map(|s| s.success()).unwrap_or(false) { return Ok("wallpaper-set".into()); }
     }
     Err("failed-to-set-wallpaper".into())
+}
+
+fn documents_dir() -> Option<PathBuf> {
+    // Prefer user-configured path if provided
+    if let Some(s) = Some(read_settings()) { if let Some(ud) = s.user_dirs.as_ref() {
+        if let Some(v) = ud.get("documents").and_then(|x| x.as_str()) {
+            let p = expand_user_path(v);
+            if p.exists() { return Some(p); }
+        }
+    }}
+    if let Some(home) = dirs::home_dir() {
+        // XDG user dirs
+        let cfg = home.join(".config/user-dirs.dirs");
+        if cfg.exists() {
+            if let Ok(s) = fs::read_to_string(&cfg) {
+                for line in s.lines() {
+                    if line.starts_with("XDG_DOCUMENTS_DIR=") {
+                        let raw = line.split('=').nth(1).unwrap_or("").trim().trim_matches('"');
+                        let path = raw.replace("$HOME", &home.to_string_lossy());
+                        let p = PathBuf::from(path);
+                        if p.exists() { return Some(p); }
+                    }
+                }
+            }
+        }
+        let candidates = ["Documents","ドキュメント","documents"]; 
+        for c in candidates { let p = home.join(c); if p.exists() { return Some(p); } }
+    }
+    None
+}
+
+#[tauri::command]
+fn list_documents_items() -> Result<Vec<DesktopItem>, String> {
+    let mut items: Vec<DesktopItem> = Vec::new();
+    if let Some(d) = documents_dir() {
+        if d.exists() && d.is_dir() {
+            if let Ok(read) = fs::read_dir(&d) {
+                for e in read.flatten() {
+                    let p = e.path();
+                    let is_dir = p.is_dir();
+                    let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("").to_string();
+                    items.push(DesktopItem { name, path: p.to_string_lossy().to_string(), is_dir });
+                }
+            }
+        }
+    }
+    Ok(items)
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct DeSettings {
+    llm_remote_url: Option<String>,
+    llm_api_key: Option<String>,
+    llm_model: Option<String>,
+    llm_autostart_localhost: bool,
+    llm_mode: Option<String>, // "lmstudio" | "local"
+    hf_model_id: Option<String>,
+    local_model_path: Option<String>,
+    user_dirs: Option<serde_json::Value>, // { downloads, music, pictures, documents, videos, desktop }
+    app_sort: Option<String>, // name|recent
+    favorite_order: Option<Vec<String>>, // favorite app names
+}
+
+fn settings_dir() -> Option<PathBuf> { history_dir() }
+fn settings_path() -> Option<PathBuf> { settings_dir().map(|d| d.join("config.json")) }
+
+fn read_settings() -> DeSettings {
+    if let Some(p) = settings_path() {
+        if p.exists() {
+            if let Ok(s) = fs::read_to_string(&p) {
+                if let Ok(v) = serde_json::from_str::<DeSettings>(&s) { return v; }
+            }
+        }
+    }
+    DeSettings{ 
+        llm_remote_url: Some("http://localhost:1234/v1/chat/completions".into()),
+        llm_api_key: None,
+        llm_model: Some("qwen3-14b@q4_k_m".into()),
+        llm_autostart_localhost: true,
+        llm_mode: Some("lmstudio".into()),
+        hf_model_id: None,
+        local_model_path: None,
+        user_dirs: None,
+        app_sort: Some("name".into()),
+        favorite_order: None 
+    }
+}
+
+fn write_settings(s: &DeSettings) {
+    if let Some(dir) = settings_dir() { let _ = fs::create_dir_all(&dir); }
+    if let Some(p) = settings_path() {
+        if let Ok(txt) = serde_json::to_string_pretty(&s) { let _ = fs::write(p, txt); }
+    }
+}
+
+#[tauri::command]
+fn get_settings() -> Result<DeSettings, String> { Ok(read_settings()) }
+
+#[tauri::command]
+fn set_settings(new_s: DeSettings) -> Result<String, String> {
+    write_settings(&new_s);
+    // Optional: auto-start LM Studio if localhost specified
+    if new_s.llm_autostart_localhost {
+        if let Some(url) = &new_s.llm_remote_url {
+            if url.contains("localhost") || url.contains("127.0.0.1") {
+                let _ = try_start_lmstudio();
+            }
+        }
+    }
+    Ok("settings-updated".into())
+}
+
+#[tauri::command]
+fn try_start_lmstudio() -> Result<String, String> {
+    // Best-effort: try to spawn lmstudio if available
+    let candidates = ["lmstudio", "lm-studio", "LM Studio"];
+    for c in candidates.iter() {
+        if which(c) {
+            let _ = Command::new(c).arg("--headless").spawn();
+            return Ok("lmstudio-started".into())
+        }
+    }
+    Err("lmstudio-not-found".into())
+}
+
+#[tauri::command]
+fn reorder_favorite_apps(_app_handle: tauri::AppHandle, names: Vec<String>) -> Result<String, String> {
+    // Reorder favorites.json according to provided names sequence
+    let home = dirs::home_dir().ok_or_else(|| "cannot-detect-home".to_string())?;
+    let dir = home.join(".local").join("share").join("sis-ui");
+    let path = dir.join("favorites.json");
+    let mut apps = get_favorite_apps(_app_handle.clone())?.into_iter().collect::<Vec<_>>();
+    let pos = |n: &str| names.iter().position(|x| x==n).unwrap_or(usize::MAX);
+    apps.sort_by_key(|a| pos(&a.name));
+    let content = serde_json::to_string_pretty(&apps).map_err(|e| format!("Failed to serialize favorites: {}", e))?;
+    fs::write(&path, content).map_err(|e| format!("Failed to write favorites.json: {}", e))?;
+    Ok("favorites-reordered".into())
+}
+
+fn logs_dir() -> Option<PathBuf> { history_dir().map(|d| d.join("logs")) }
+fn backend_log_path() -> Option<PathBuf> { logs_dir().map(|d| d.join("backend.log")) }
+
+fn log_append(level: &str, message: &str) {
+    if let Some(dir) = logs_dir() { let _ = fs::create_dir_all(&dir); }
+    if let Some(path) = backend_log_path() {
+        let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+        let line = format!("{} [{}] {}\n", ts, level, message);
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+            let _ = f.write_all(line.as_bytes());
+        }
+    }
+}
+
+#[tauri::command]
+fn get_backend_log(limit: Option<u32>) -> Result<String, String> {
+    let path = backend_log_path().ok_or_else(|| "log-path-missing".to_string())?;
+    if !path.exists() { return Ok(String::new()); }
+    let content = std::fs::read_to_string(&path).map_err(|e| format!("read-log-failed: {}", e))?;
+    if let Some(n) = limit {
+        let lines: Vec<&str> = content.lines().collect();
+        let start = lines.len().saturating_sub(n as usize);
+        return Ok(lines[start..].join("\n"));
+    }
+    Ok(content)
+}
+
+#[tauri::command]
+fn clear_backend_log() -> Result<String, String> {
+    if let Some(path) = backend_log_path() {
+        let _ = std::fs::write(path, b"");
+    }
+    Ok("cleared".into())
+}
+
+fn expand_user_path(p: &str) -> PathBuf {
+    if p.starts_with("~/") {
+        if let Some(home) = dirs::home_dir() { return home.join(&p[2..]); }
+    }
+    PathBuf::from(p)
 }

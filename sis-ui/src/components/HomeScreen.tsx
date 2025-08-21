@@ -10,9 +10,14 @@ function HomeScreen() {
   const [tab, setTab] = useState<'all'|'recent'>('all')
   const [recent, setRecent] = useState<AppInfo[]>([])
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [drawerTab, setDrawerTab] = useState<'desktop'|'documents'>('desktop')
   const [desktopItems, setDesktopItems] = useState<{name:string; path:string; is_dir:boolean}[]>([])
+  const [docItems, setDocItems] = useState<{name:string; path:string; is_dir:boolean}[]>([])
   useEffect(()=>{ api.getLaunchHistory(24).then(setRecent).catch(()=>{}) },[])
-  useEffect(()=>{ if (drawerOpen) api.listDesktopItems().then(setDesktopItems).catch(()=>{}) }, [drawerOpen])
+  useEffect(()=>{ if (drawerOpen) {
+    if (drawerTab==='desktop') api.listDesktopItems().then(setDesktopItems).catch(()=>{})
+    if (drawerTab==='documents') api.listDocumentsItems().then(setDocItems).catch(()=>{})
+  } }, [drawerOpen, drawerTab])
   return (
     <div className="home-screen">
       <div className="dashboard-grid two-columns">
@@ -22,15 +27,18 @@ function HomeScreen() {
             <button onClick={()=>setDrawerOpen(v=>!v)}>{drawerOpen?'デスクトップを隠す':'デスクトップを表示'}</button>
           </div>
           {drawerOpen && (
-            <div style={{ position:'absolute', top:36, right:-8, width: 320, maxHeight: 360, overflow:'auto', background:'var(--bg-panel)', border:'1px solid rgba(0,0,0,.08)', borderRadius: 12, boxShadow:'var(--shadow-depth)', padding: 8 }}>
-              <div style={{ fontSize:12, opacity:.8, margin:'4px 6px' }}>デスクトップ</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:6 }}>
-                {desktopItems.map((it, i)=> (
-                  <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 8px', borderRadius:8, cursor:'pointer' }}
+            <div style={{ position:'absolute', top:36, right:-8, width: 420, maxHeight: 420, overflow:'auto', background:'var(--bg-panel)', border:'1px solid rgba(0,0,0,.08)', borderRadius: 14, boxShadow:'var(--shadow-depth)', padding: 10 }}>
+              <div style={{ display:'flex', gap:8, margin:'2px 4px 10px' }}>
+                <button className={drawerTab==='desktop'?'active':''} onClick={()=>setDrawerTab('desktop')}>デスクトップ</button>
+                <button className={drawerTab==='documents'?'active':''} onClick={()=>setDrawerTab('documents')}>ドキュメント</button>
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:8 }}>
+                {(drawerTab==='desktop'? desktopItems: docItems).map((it, i)=> (
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:10, cursor:'pointer', background:'var(--bg-glass)' }}
                        onClick={()=> api.launchApp(`xdg-open "${it.path}"`)}
-                       onContextMenu={(e)=>{ e.preventDefault(); if(!it.is_dir) api.setWallpaper(it.path) }}
+                       onContextMenu={(e)=>{ e.preventDefault(); if(drawerTab==='desktop' && !it.is_dir) api.setWallpaper(it.path) }}
                   >
-                    <span style={{ opacity:.7 }}>{it.is_dir?'📁':'📄'}</span>
+                    <span style={{ opacity:.8, fontSize:18 }}>{it.is_dir?'📁':'📄'}</span>
                     <span style={{ whiteSpace:'nowrap', textOverflow:'ellipsis', overflow:'hidden' }}>{it.name}</span>
                   </div>
                 ))}

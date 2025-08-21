@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import './BottomBar.css';
 
@@ -9,6 +9,11 @@ function BottomBar() {
   const [busy, setBusy] = useState(false);
   const [sudoPrompt, setSudoPrompt] = useState<{cmd: string} | null>(null);
   const [sudoPassword, setSudoPassword] = useState('');
+  const [settings, setSettings] = useState<any | null>(null)
+  const [showLogs, setShowLogs] = useState<null | 'backend' | 'frontend'>(null)
+  const [backendLog, setBackendLog] = useState('')
+
+  useEffect(() => { api.getSettings().then(setSettings) }, [])
 
   function extractBashCommandBlocks(text: string): { cmd: string; needsSudo: boolean }[] {
     const blocks: { cmd: string; needsSudo: boolean }[] = []
@@ -65,8 +70,19 @@ function BottomBar() {
         }
       } else {
         const guide = "次の指示をbashコマンドに変換して、必ず```bash\n#!/usr/bin/env bash\n...\n``` もしくは ''' で囲まれたブロックで返してください。説明文は不要。";
-        const res = await api.llmQuery(`${guide}\n\n${q}`);
-        const text = res.text || res.message || ''
+        let text = ''
+        const prompt = `${guide}\n\n${q}`
+        if (settings?.llm_mode === 'lmstudio') {
+          const url = settings?.llm_remote_url || 'http://localhost:1234/v1/chat/completions'
+          if (settings?.llm_autostart_localhost && /localhost|127\.0\.0\.1/.test(url)) {
+            await api.tryStartLmStudio()
+          }
+          const res = await api.llmQueryRemote(url, prompt, settings?.llm_api_key || undefined, settings?.llm_model || undefined)
+          text = res.text || res.message || ''
+        } else {
+          const res = await api.llmQuery(prompt)
+          text = res.text || res.message || ''
+        }
         setOutput(text);
         // Try to auto-extract bash commands and run them
         const blocks = extractBashCommandBlocks(text)
@@ -114,7 +130,7 @@ function BottomBar() {
           className="chat-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Alt+Space ランチャー / Ctrl+K Halo HUD / Ctrl+P コマンドパレット"
+          placeholder="Alt+Space ランチャー / Ctrl+Alt+Z HUD / Ctrl+P パレット（先頭@でAI）"
         />
         <span className="cursor-blink"></span>
       </form>
@@ -124,6 +140,8 @@ function BottomBar() {
           <div className="status-dot"></div>
           <span className="status-text">{busy ? 'BUSY' : 'ONLINE'}</span>
         </div>
+  <button type="button" title="バックログ" className="send-button" onClick={async()=>{ setShowLogs('backend'); setBackendLog(await api.getBackendLog(500)); }}>🧾B</button>
+  <button type="button" title="フロントログ" className="send-button" onClick={()=>{ setShowLogs('frontend') }}>🧾F</button>
         <button type="button" title="Push-To-Talk (長押しで録音)" className="send-button" onMouseDown={() => console.log('PTT start')} onMouseUp={() => console.log('PTT stop')}>
           🎤
         </button>
@@ -148,6 +166,23 @@ function BottomBar() {
           <input type="password" value={sudoPassword} onChange={(e) => setSudoPassword(e.target.value)} style={{ width: '60%', marginRight: 8 }} />
           <button onClick={submitSudo} disabled={busy || !sudoPassword}>送信</button>
           <button onClick={() => { setSudoPrompt(null); setSudoPassword(''); }}>キャンセル</button>
+        </div>
+      )}
+      {showLogs && (
+        <div style={{ position: 'absolute', left: 16, right: 16, bottom: 160, top: 60, background: 'rgba(0,0,0,0.7)', border: '1px solid #345', borderRadius: 8, padding: 8 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+            <div style={{ color:'#cfe6ff' }}>{showLogs==='backend'?'バックログ（最新 約500行）':'フロントログ（直近出力）'}</div>
+            <div style={{ display:'flex', gap:8 }}>
+              {showLogs==='backend' && (<>
+                <button onClick={async()=>setBackendLog(await api.getBackendLog(500))}>再読込</button>
+                <button onClick={async()=>{ await api.clearBackendLog(); setBackendLog(''); }}>消去</button>
+              </>)}
+              <button onClick={()=>setShowLogs(null)}>閉じる</button>
+            </div>
+          </div>
+          <pre style={{ whiteSpace:'pre-wrap', color:'#cfe6ff', fontSize:12, height:'100%', overflow:'auto', margin:0 }}>
+            {showLogs==='backend' ? backendLog : (output || '(直近のAI/コマンド出力をここに表示します)')}
+          </pre>
         </div>
       )}
     </div>
