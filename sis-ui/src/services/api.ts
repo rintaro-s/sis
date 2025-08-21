@@ -89,12 +89,26 @@ export const api = {
   catch { return [] }
   },
 
+  async getLaunchHistory(limit = 20): Promise<AppInfo[]> {
+    try { return await safeInvoke<AppInfo[]>('get_launch_history', { limit }) }
+    catch { return [] }
+  },
+
   async getFolderCounts(): Promise<{ pictures: number; documents: number; videos: number; downloads: number; music: number; others: number }>{
     try {
       return await safeInvoke('get_folder_counts')
     } catch {
       return { pictures: 0, documents: 0, videos: 0, downloads: 0, music: 0, others: 0 }
     }
+  },
+
+  async listDesktopItems(): Promise<{ name: string; path: string; is_dir: boolean }[]> {
+    try { return await safeInvoke('list_desktop_items') } catch { return [] }
+  },
+
+  async setWallpaper(path: string): Promise<{ ok: boolean; message?: string }>{
+    try { const msg = await safeInvoke<string>('set_wallpaper', { path }); return { ok: true, message: msg } }
+    catch (e) { return { ok: false, message: (e as Error)?.message } }
   },
 
   async getFavoriteApps(): Promise<AppInfo[]> {
@@ -220,6 +234,15 @@ export const api = {
   async llmQuery(prompt: string): Promise<{ ok: boolean; text?: string; message?: string }> {
     try {
       const text = await safeInvoke<string>('llm_query', { prompt })
+      return { ok: true, text }
+    } catch (e) {
+      return { ok: false, message: (e as Error)?.message }
+    }
+  },
+
+  async llmQueryRemote(baseUrl: string, prompt: string, apiKey?: string, model?: string): Promise<{ ok: boolean; text?: string; message?: string }>{
+    try {
+      const text = await safeInvoke<string>('llm_query_remote', { baseUrl, apiKey, model, prompt })
       return { ok: true, text }
     } catch (e) {
       return { ok: false, message: (e as Error)?.message }

@@ -10,6 +10,43 @@ function BottomBar() {
   const [sudoPrompt, setSudoPrompt] = useState<{cmd: string} | null>(null);
   const [sudoPassword, setSudoPassword] = useState('');
 
+  function extractBashCommandBlocks(text: string): { cmd: string; needsSudo: boolean }[] {
+    const blocks: { cmd: string; needsSudo: boolean }[] = []
+    const fenceRe = /```[a-zA-Z]*\n([\s\S]*?)```/g
+    const singleFenceRe = /'''\n([\s\S]*?)'''/g
+    let m: RegExpExecArray | null
+    while ((m = fenceRe.exec(text)) !== null) {
+      const body = m[1].trim()
+      const isShebang = body.startsWith('#!/usr/bin/env bash') || body.startsWith('#!/bin/bash')
+      const needsSudo = /^\s*sudo\s+/m.test(body)
+      if (isShebang || /```(bash|sh|zsh)/.test(m[0])) {
+        // take non-empty lines excluding comments; join with '; '
+        const lines = body.split(/\r?\n/).filter(l => l.trim() && !l.trim().startsWith('#'))
+        const cmd = lines.join('; ')
+        if (cmd) blocks.push({ cmd, needsSudo })
+      }
+    }
+    while ((m = singleFenceRe.exec(text)) !== null) {
+      const body = m[1].trim()
+      const isShebang = body.startsWith('#!/usr/bin/env bash') || body.startsWith('#!/bin/bash')
+      const needsSudo = /^\s*sudo\s+/m.test(body)
+      if (isShebang || true) {
+        const lines = body.split(/\r?\n/).filter(l => l.trim() && !l.trim().startsWith('#'))
+        const cmd = lines.join('; ')
+        if (cmd) blocks.push({ cmd, needsSudo })
+      }
+    }
+    // Fallback: detect shebang block without fences
+    const she = /(^|\n)#!\/(usr\/bin\/env bash|bin\/bash)[\s\S]*/m.exec(text)
+    if (she) {
+      const body = text.slice(she.index).trim()
+      const lines = body.split(/\r?\n/).filter(l => l.trim() && !l.trim().startsWith('#'))
+      const cmd = lines.join('; ')
+      if (cmd) blocks.push({ cmd, needsSudo: /^\s*sudo\s+/m.test(body) })
+    }
+    return blocks
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const q = input.trim();
@@ -27,8 +64,21 @@ function BottomBar() {
           setOutput(res.text || res.message || '');
         }
       } else {
-        const res = await api.llmQuery(q);
-        setOutput(res.text || res.message || '');
+        const guide = "次の指示をbashコマンドに変換して、必ず```bash\n#!/usr/bin/env bash\n...\n``` もしくは ''' で囲まれたブロックで返してください。説明文は不要。";
+        const res = await api.llmQuery(`${guide}\n\n${q}`);
+        const text = res.text || res.message || ''
+        setOutput(text);
+        // Try to auto-extract bash commands and run them
+        const blocks = extractBashCommandBlocks(text)
+        if (blocks.length) {
+          const first = blocks[0]
+          if (first.needsSudo) {
+            setSudoPrompt({ cmd: first.cmd })
+          } else {
+            const run = await api.runSafeCommand(first.cmd)
+            setOutput((prev) => prev + '\n\n$ ' + first.cmd + '\n' + (run.text || run.message || ''))
+          }
+        }
       }
     } catch (err) {
       setOutput((err as Error).message);

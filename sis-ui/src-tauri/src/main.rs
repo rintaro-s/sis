@@ -13,7 +13,10 @@ use cfg_if::cfg_if;
 use std::process::{Command, Stdio};
 use serde::{Serialize, Deserialize};
 use base64::Engine;
+use serde_json;
 use std::collections::{HashSet, VecDeque};
+use serde_json::json;
+use std::env;
 
 struct NetworkStats {
     last_received_bytes: u64,
@@ -326,9 +329,25 @@ fn get_recent_apps() -> Result<Vec<AppInfo>, String> {
         PathBuf::from("/usr/share/applications"),
         PathBuf::from("/usr/local/share/applications"),
     ];
+    // XDG_DATA_HOME (default ~/.local/share)
+    if let Ok(xdg_home) = std::env::var("XDG_DATA_HOME") {
+        let p = PathBuf::from(xdg_home).join("applications");
+        app_dirs.push(p);
+    } else if let Some(home) = dirs::home_dir() { app_dirs.push(home.join(".local/share/applications")); }
+    // XDG_DATA_DIRS (colon separated)
+    if let Ok(xdg_dirs) = std::env::var("XDG_DATA_DIRS") {
+        for d in xdg_dirs.split(':') {
+            if !d.is_empty() { app_dirs.push(PathBuf::from(d).join("applications")); }
+        }
+    } else {
+        app_dirs.push(PathBuf::from("/usr/local/share/applications"));
+        app_dirs.push(PathBuf::from("/usr/share/applications"));
+    }
     if let Some(home) = dirs::home_dir() {
-        app_dirs.push(home.join(".local/share/applications"));
         app_dirs.push(home.join(".local/share/flatpak/exports/share/applications"));
+        // Wine/Steam user apps
+        app_dirs.push(home.join(".local/share/applications/wine"));
+        app_dirs.push(home.join(".local/share/applications/steam"));
     }
     // Flatpak system exports
     app_dirs.push(PathBuf::from("/var/lib/flatpak/exports/share/applications"));
@@ -670,7 +689,10 @@ fn main() {
             organize_latest_download,
             set_brightness,
             get_recent_apps,
+            get_launch_history,
             get_folder_counts,
+            list_desktop_items,
+            set_wallpaper,
             get_favorite_apps,
             add_favorite_app,
             remove_favorite_app,
@@ -688,6 +710,7 @@ fn main() {
             bluetooth_set,
             power_action,
             llm_query,
+            llm_query_remote,
             run_safe_command,
             run_with_sudo,
             clamav_scan,
@@ -947,4 +970,134 @@ fn control_center_state() -> Result<ControlCenterState, String> {
         network: read_network_enabled(),
         bluetooth: read_bluetooth_enabled(),
     })
+}
+
+#[tauri::command]
+fn get_launch_history(limit: Option<u32>) -> Result<Vec<AppInfo>, String> {
+    let mut out: Vec<AppInfo> = Vec::new();
+    let mut n = 0u32;
+    for e in read_launch_history() {
+        let exec_first = e.exec.split_whitespace().next().unwrap_or("").to_string();
+        let p = Path::new(&exec_first);
+        let ok = (p.is_absolute() && p.exists()) || which(&exec_first);
+        if ok {
+            out.push(AppInfo { name: e.name, exec: e.exec, icon_data_url: e.icon_data_url });
+            n += 1;
+            if let Some(lim) = limit { if n >= lim { break; } }
+        }
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+fn llm_query_remote(base_url: String, api_key: Option<String>, model: Option<String>, prompt: String) -> Result<String, String> {
+    let url = base_url;
+    let model_name = model.unwrap_or_else(|| "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF".to_string());
+    let body = json!({
+        "model": model_name,
+        "messages": [ { "role": "user", "content": prompt } ],
+        "temperature": 0.7
+    });
+    let client = match reqwest::blocking::Client::builder().timeout(std::time::Duration::from_secs(30)).build() {
+        Ok(c) => c,
+        Err(e) => return Err(format!("llm-client-error: {}", e)),
+    };
+    let mut req = client.post(&url).json(&body);
+    if let Some(key) = api_key { if !key.is_empty() { req = req.bearer_auth(key); } }
+    match req.send() {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                match resp.json::<serde_json::Value>() {
+                    Ok(v) => {
+                        if let Some(text) = v["choices"][0]["message"]["content"].as_str() {
+                            Ok(text.to_string())
+                        } else if let Some(text) = v["choices"][0]["text"].as_str() {
+                            Ok(text.to_string())
+                        } else { Ok(v.to_string()) }
+                    }
+                    Err(e) => Err(format!("llm-invalid-json: {}", e))
+                }
+            } else {
+                Err(format!("llm-http-{}: {}", resp.status(), resp.text().unwrap_or_default()))
+            }
+        }
+        Err(e) => Err(format!("llm-http-error: {}", e))
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct DesktopItem { name: String, path: String, is_dir: bool }
+
+fn desktop_dirs() -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if let Some(home) = dirs::home_dir() {
+        out.push(home.join("Desktop"));
+        out.push(home.join("デスクトップ"));
+        out.push(home.join("desktop"));
+        out.push(home.join("デスクトッブ")); // common typo fallback
+    }
+    // XDG user dirs: respect XDG_DESKTOP_DIR if set in user-dirs.dirs
+    if let Some(home) = dirs::home_dir() {
+        let cfg = home.join(".config/user-dirs.dirs");
+        if cfg.exists() {
+            if let Ok(s) = fs::read_to_string(&cfg) {
+                for line in s.lines() {
+                    if line.starts_with("XDG_DESKTOP_DIR=") {
+                        let raw = line.split('=').nth(1).unwrap_or("").trim().trim_matches('"');
+                        let path = raw.replace("$HOME", &home.to_string_lossy());
+                        let p = PathBuf::from(path);
+                        if p.exists() { out.push(p); }
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+#[tauri::command]
+fn list_desktop_items() -> Result<Vec<DesktopItem>, String> {
+    let mut items: Vec<DesktopItem> = Vec::new();
+    for d in desktop_dirs() {
+        if d.exists() && d.is_dir() {
+            if let Ok(read) = fs::read_dir(&d) {
+                for e in read.flatten() {
+                    let p = e.path();
+                    let is_dir = p.is_dir();
+                    let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("").to_string();
+                    items.push(DesktopItem { name, path: p.to_string_lossy().to_string(), is_dir });
+                }
+            }
+            break; // first existing desktop dir
+        }
+    }
+    Ok(items)
+}
+
+#[tauri::command]
+fn set_wallpaper(path: String) -> Result<String, String> {
+    let p = PathBuf::from(&path);
+    if !p.exists() { return Err("wallpaper-file-not-found".into()); }
+    // Try GNOME / gsettings
+    if which("gsettings") {
+        let s = Command::new("gsettings")
+            .arg("set").arg("org.gnome.desktop.background").arg("picture-uri")
+            .arg(format!("file://{}", p.to_string_lossy()))
+            .status();
+        if s.map(|s| s.success()).unwrap_or(false) { return Ok("wallpaper-set".into()); }
+    }
+    // XFCE
+    if which("xfconf-query") {
+        let status = Command::new("sh").arg("-c").arg(format!(
+            "for ch in $(xfconf-query -c xfce4-desktop -p /backdrop -l | grep image-path$); do xfconf-query -c xfce4-desktop -p $ch -s '{}'; done",
+            p.to_string_lossy()
+        )).status();
+        if status.map(|s| s.success()).unwrap_or(false) { return Ok("wallpaper-set".into()); }
+    }
+    // Fallback: feh
+    if which("feh") {
+        let status = Command::new("feh").arg("--bg-fill").arg(&path).status();
+        if status.map(|s| s.success()).unwrap_or(false) { return Ok("wallpaper-set".into()); }
+    }
+    Err("failed-to-set-wallpaper".into())
 }

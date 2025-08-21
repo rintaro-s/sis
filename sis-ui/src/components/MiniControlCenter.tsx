@@ -25,8 +25,18 @@ export default function MiniControlCenter({ open, onClose }: Props) {
 
   if (!open) return null
 
-  const applyVolume = async (v: number) => { setVolume(v); const r = await api.setVolume(v); if (!r.ok) alert('音量変更に失敗') }
-  const applyBrightness = async (v: number) => { setBrightness(v); const r = await api.setBrightness(v); if (!r.ok) alert('輝度変更に失敗') }
+  // Immediate UI feedback with debounced backend update to avoid command flooding
+  let volTimer: any; let briTimer: any;
+  const applyVolume = (v: number) => {
+    setVolume(v)
+    clearTimeout(volTimer)
+    volTimer = setTimeout(async () => { const r = await api.setVolume(v); if (!r.ok) console.warn('音量変更に失敗') }, 120)
+  }
+  const applyBrightness = (v: number) => {
+    setBrightness(v)
+    clearTimeout(briTimer)
+    briTimer = setTimeout(async () => { const r = await api.setBrightness(v); if (!r.ok) console.warn('輝度変更に失敗') }, 120)
+  }
   const toggleNetwork = async () => { const n = !network; setNetwork(n); const r = await api.networkSet(n); if (!r.ok) alert('ネットワーク切替失敗') }
   const toggleBluetooth = async () => { const b = !bluetooth; setBluetooth(b); const r = await api.bluetoothSet(b); if (!r.ok) alert('Bluetooth切替失敗') }
 
@@ -36,11 +46,11 @@ export default function MiniControlCenter({ open, onClose }: Props) {
         <div className="cc-grid" aria-live="polite">
           <div className="cc-tile wide">
             <div className="cc-tile-title">音量</div>
-            <input type="range" min={0} max={100} value={volume} onChange={(e)=>applyVolume(Number(e.target.value))} />
+            <input type="range" min={0} max={100} value={volume} onInput={(e)=>applyVolume(Number((e.target as HTMLInputElement).value))} onChange={(e)=>applyVolume(Number(e.target.value))} />
           </div>
           <div className="cc-tile wide">
             <div className="cc-tile-title">輝度</div>
-            <input type="range" min={0} max={100} value={brightness} onChange={(e)=>applyBrightness(Number(e.target.value))} />
+            <input type="range" min={0} max={100} value={brightness} onInput={(e)=>applyBrightness(Number((e.target as HTMLInputElement).value))} onChange={(e)=>applyBrightness(Number(e.target.value))} />
           </div>
           <div className={`cc-tile ${network?'active':''}`} onClick={toggleNetwork}>
             <div className="cc-tile-title">ネットワーク</div>

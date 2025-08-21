@@ -40,7 +40,7 @@ function FileManager() {
 
   return (
     <div className="file-manager">
-      <h3>ファイル管理</h3>
+  <h3>ファイル管理</h3>
       <div className="folder-categories">
         <div className="folder-card">
           <img src={IconFolder} alt="Images" />

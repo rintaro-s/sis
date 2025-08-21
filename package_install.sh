@@ -27,6 +27,8 @@ sudo apt-get install -y \
     libgtk-3-dev \
     npm \
     rustup
+
+rustup default stable
 # --- Python Library Installation ---
 echo "Installing required Python libraries via pip..."
 echo "pip3 install -q requests xmltodict raylib raygui tauri"

@@ -1,8 +1,8 @@
 .halo-root{position:fixed;inset:0;pointer-events:none;z-index:1000}
-.halo-overlay{position:absolute;inset:0;background:radial-gradient(ellipse at center, rgba(230,235,255,.28), rgba(230,235,255,0) 60%);backdrop-filter:blur(2px)}
-.halo-ring{position:absolute;transform:translate(-50%,-50%);width:380px;height:380px;border-radius:9999px;border:1px solid rgba(180,200,255,.35);background:linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.06));box-shadow:0 0 24px rgba(168,195,255,.35);display:grid;place-items:center;pointer-events:none}
+.halo-overlay{position:absolute;inset:0;background:radial-gradient(ellipse at center, rgba(16,24,40,.18), rgba(16,24,40,0) 58%), radial-gradient(circle at 70% 20%, rgba(167,199,231,.15), transparent 60%);backdrop-filter:blur(1.5px)}
+.halo-ring{position:absolute;transform:translate(-50%,-50%);width:380px;height:380px;border-radius:9999px;border:1px solid rgba(180,200,255,.35);background:linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.08));box-shadow:0 0 24px rgba(168,195,255,.28);display:grid;place-items:center;pointer-events:none}
 .halo-center{width:120px;height:120px;border-radius:9999px;border:1px solid rgba(190,210,255,.5);background:radial-gradient(circle at 50% 45%, rgba(255,255,255,.45), rgba(255,255,255,.08));box-shadow:inset 0 1px 10px rgba(255,255,255,.6), 0 0 20px rgba(150,180,255,.25)}
-.halo-hint{position:absolute;left:50%;bottom:18%;transform:translateX(-50%);color:#3b4a6b;background:rgba(255,255,255,.55);border:1px solid rgba(200,210,255,.6);backdrop-filter:blur(6px);padding:6px 10px;border-radius:10px;font-size:12px}
+.halo-hint{position:absolute;left:50%;bottom:18%;transform:translateX(-50%);color:#263247;background:rgba(255,255,255,.72);border:1px solid rgba(200,210,255,.6);backdrop-filter:blur(4px);padding:6px 10px;border-radius:10px;font-size:12px}
 .halo-slot{position:absolute;top:50%;left:50%;transform-origin:center -150px;translate:-50% -50%;pointer-events:auto;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px}
 .halo-slot .halo-key,.halo-slot .halo-label{transform:rotate(0deg)}
 .halo-slot:hover .halo-key{background:rgba(255,255,255,.9)}

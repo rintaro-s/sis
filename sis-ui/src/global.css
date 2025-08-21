@@ -10,7 +10,7 @@
   --color-warning: #fff2cd; /* cream yellow */
   
   /* Backgrounds - luminous and translucent */
-  --bg-void: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 30%, #f1f5f9 100%);
+  --bg-void: linear-gradient(135deg, #f9fbff 0%, #e8eef6 32%, #f6f9fe 100%);
   --bg-panel: rgba(255, 255, 255, 0.75);
   --bg-elevated: rgba(248, 250, 252, 0.85);
   --bg-glass: rgba(255, 255, 255, 0.4);
@@ -68,7 +68,7 @@ body[data-theme='light']{
   --text-primary: #1f2937;
 }
 body[data-theme='dark']{
-  --bg-void: linear-gradient(135deg, #0f172a 0%, #111827 40%, #0b1220 100%);
+  --bg-void: linear-gradient(135deg, #0d1526 0%, #0f1930 42%, #0a1324 100%);
   --bg-panel: rgba(17, 24, 39, 0.72);
   --bg-glass: rgba(30, 41, 59, 0.36);
   --text-primary: #e7edf5;

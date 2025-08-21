@@ -120,9 +120,18 @@ export default function HaloHud({ visible, onAction, onClose }: Props) {
     if (onClose) onClose()
   }
   const handleCancel = () => { if (onClose) onClose() }
+  // wheel to rotate selection
+  const onWheel = (e: React.WheelEvent) => {
+    e.preventDefault()
+    const idx = selectedRef.current ? idByIndex.indexOf(selectedRef.current) : 0
+    const dir = e.deltaY > 0 ? 1 : -1
+    const next = (idx + dir + idByIndex.length) % idByIndex.length
+    selectedRef.current = idByIndex[next]
+    setHint(actions[next].label)
+  }
 
   return (
-    <div className="halo-root" onContextMenu={(e)=>e.preventDefault()} onClick={handleCancel}>
+  <div className="halo-root" onContextMenu={(e)=>e.preventDefault()} onClick={handleCancel} onWheel={onWheel}>
       <div className="halo-overlay" />
       <div className="halo-ring" ref={ringRef}>
         <div className="halo-center" data-hint="左クリックでキャンセル" />
