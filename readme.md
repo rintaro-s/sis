@@ -14,7 +14,7 @@
     子ども～大人まで使える社会的・教育的価値を内包
 
 - **搭載AI**  
-    gemma-3-12b-it-GGUF(Q5_K_M)/gemma-3-4b-it-GGUF(Q5_K_M)/Qwen3-14B-GGUF(Q4_k_m)＋ RAG ＋ agent機能
+    gemma-3-12b-GGUF(Q4_k_m)＋ RAG ＋ agent機能
 
 ## 対象
 

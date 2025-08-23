@@ -26,11 +26,12 @@ sudo apt-get install -y \
     xdg-utils \
     libgtk-3-dev \
     npm \
-    rustup
+    rustup \
+    libwebkit2gtk-4.1-dev
 
 rustup default stable
 # --- Python Library Installation ---
 echo "Installing required Python libraries via pip..."
-echo "pip3 install -q requests xmltodict raylib raygui tauri"
+echo "pip3 install -q requests xmltodict raylib"
 
 echo "--- Dependency installation complete. ---"
