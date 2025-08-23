@@ -11,14 +11,14 @@
   
   /* Backgrounds - luminous and translucent */
   --bg-void: linear-gradient(135deg, #f9fbff 0%, #e8eef6 32%, #f6f9fe 100%);
-  --bg-panel: rgba(255, 255, 255, 0.75);
+  --bg-panel: rgba(255, 255, 255, 0.9);
   --bg-elevated: rgba(248, 250, 252, 0.85);
   --bg-glass: rgba(255, 255, 255, 0.4);
   --bg-glow: radial-gradient(circle, rgba(167, 199, 231, 0.1) 0%, transparent 70%);
   
   /* Text colors - soft and readable */
-  --text-primary: #334155;
-  --text-secondary: #64748b;
+  --text-primary: #1f2a37; /* darker for better contrast */
+  --text-secondary: #42556b;
   --text-glow: #2563eb;
   --text-magic: #8b5cf6;
   --text-dim: #94a3b8;
@@ -64,15 +64,17 @@ body {
 /* Light/Dark quick theme */
 body[data-theme='light']{
   --bg-void: linear-gradient(135deg, #ffffff 0%, #f1f5f9 40%, #ffffff 100%);
-  --bg-panel: rgba(255,255,255,0.85);
-  --text-primary: #1f2937;
+  --bg-panel: rgba(255,255,255,0.95);
+  --bg-glass: rgba(255,255,255,0.7);
+  --text-primary: #111827;
+  --text-secondary: #374151;
 }
 body[data-theme='dark']{
   --bg-void: linear-gradient(135deg, #0d1526 0%, #0f1930 42%, #0a1324 100%);
-  --bg-panel: rgba(17, 24, 39, 0.72);
-  --bg-glass: rgba(30, 41, 59, 0.36);
-  --text-primary: #e7edf5;
-  --text-secondary: #c9d4e0;
+  --bg-panel: rgba(17, 24, 39, 0.88);
+  --bg-glass: rgba(30, 41, 59, 0.5);
+  --text-primary: #f0f5fb;
+  --text-secondary: #d0dbea;
 }
 
 /* Reduce motion for users (or when performance constrained) */

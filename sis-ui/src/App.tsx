@@ -110,13 +110,12 @@ function App() {
         onClose={handleMenuClose}
       />
       {settingsOpen && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex: 1000 }} onClick={()=>setSettingsOpen(false)}>
-          <div style={{ position:'absolute', top:'8%', left:'50%', transform:'translateX(-50%)', width:'min(980px, 92vw)', maxHeight:'84vh', overflow:'auto', background:'rgba(12,18,28,0.9)', border:'1px solid #2b3c51', borderRadius:12, boxShadow:'0 12px 50px rgba(0,0,0,0.45)', padding:16 }} onClick={(e)=>e.stopPropagation()}>
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex: 1000 }}>
+          <div style={{ position:'absolute', top:'8%', left:'50%', transform:'translateX(-50%)', width:'min(980px, 92vw)', maxHeight:'84vh', overflow:'auto', background:'rgba(12,18,28,0.9)', border:'1px solid #2b3c51', borderRadius:12, boxShadow:'0 12px 50px rgba(0,0,0,0.45)', padding:16 }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
               <h3 style={{ margin:0 }}>設定</h3>
-              <button onClick={()=>setSettingsOpen(false)}>閉じる</button>
             </div>
-            <Settings />
+            <Settings onClose={()=>setSettingsOpen(false)} />
           </div>
         </div>
       )}

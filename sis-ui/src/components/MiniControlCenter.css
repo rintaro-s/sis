@@ -4,9 +4,9 @@
 .cc-anchor.open .cc-panel{opacity:1;transform:translateY(0)}
 .cc-panel{width:min(92vw,420px);background:var(--bg-panel);border:1px solid rgba(167,199,231,0.25);border-radius:16px;box-shadow:var(--shadow-soft);backdrop-filter:blur(8px);padding:12px}
 .cc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.cc-tile{background:rgba(255,255,255,0.06);border:1px solid rgba(167,199,231,0.2);border-radius:12px;padding:10px;cursor:pointer;user-select:none;transition:transform .08s ease, background .15s ease}
+.cc-tile{background:rgba(255,255,255,0.1);border:1px solid rgba(167,199,231,0.35);border-radius:12px;padding:10px;cursor:pointer;user-select:none;transition:transform .08s ease, background .15s ease}
 .cc-tile:hover{transform:translateY(-1px)}
-.cc-tile.active{background:rgba(59,130,246,0.15);border-color:rgba(59,130,246,0.35)}
+.cc-tile.active{background:rgba(59,130,246,0.22);border-color:rgba(59,130,246,0.5)}
 .cc-tile.wide{grid-column:span 2}
 .cc-tile-title{font-size:.85rem;color:var(--text-secondary);margin-bottom:6px}
 .cc-tile-body{font-size:1.05rem;color:var(--text-primary)}

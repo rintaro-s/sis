@@ -126,14 +126,14 @@
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  background: var(--bg-panel);
+  background: rgba(255,255,255,0.96);
   color: var(--text-primary);
   padding: 6px 10px;
   border-radius: var(--border-radius-small);
   white-space: nowrap;
   font-size: 0.8em;
   z-index: 1001;
-  border: 1px solid rgba(167, 199, 231, 0.2);
+  border: 1px solid rgba(167, 199, 231, 0.35);
   box-shadow: var(--shadow-depth);
   font-family: var(--font-family-ui);
   backdrop-filter: blur(15px);

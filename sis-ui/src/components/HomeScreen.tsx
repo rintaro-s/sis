@@ -27,14 +27,14 @@ function HomeScreen() {
             <button onClick={()=>setDrawerOpen(v=>!v)}>{drawerOpen?'デスクトップを隠す':'デスクトップを表示'}</button>
           </div>
           {drawerOpen && (
-            <div style={{ position:'absolute', top:36, right:-8, width: 420, maxHeight: 420, overflow:'auto', background:'var(--bg-panel)', border:'1px solid rgba(0,0,0,.08)', borderRadius: 14, boxShadow:'var(--shadow-depth)', padding: 10 }}>
+            <div style={{ position:'absolute', top:36, right:-8, width: 560, maxHeight: 520, overflow:'auto', background:'var(--bg-panel)', border:'1px solid rgba(0,0,0,.08)', borderRadius: 14, boxShadow:'var(--shadow-depth)', padding: 14 }}>
               <div style={{ display:'flex', gap:8, margin:'2px 4px 10px' }}>
-                <button className={drawerTab==='desktop'?'active':''} onClick={()=>setDrawerTab('desktop')}>デスクトップ</button>
-                <button className={drawerTab==='documents'?'active':''} onClick={()=>setDrawerTab('documents')}>ドキュメント</button>
+                <button style={{ padding:'6px 10px', borderRadius:10, border:'1px solid rgba(167,199,231,.35)', background: drawerTab==='desktop'?'#2f63bd':'#e7efff', color: drawerTab==='desktop'?'#fff':'#102542' }} onClick={()=>setDrawerTab('desktop')}>デスクトップ</button>
+                <button style={{ padding:'6px 10px', borderRadius:10, border:'1px solid rgba(167,199,231,.35)', background: drawerTab==='documents'?'#2f63bd':'#e7efff', color: drawerTab==='documents'?'#fff':'#102542' }} onClick={()=>setDrawerTab('documents')}>ドキュメント</button>
               </div>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:8 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:10 }}>
                 {(drawerTab==='desktop'? desktopItems: docItems).map((it, i)=> (
-                  <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:10, cursor:'pointer', background:'var(--bg-glass)' }}
+          <div key={i} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 12px', borderRadius:12, cursor:'pointer', background:'var(--bg-glass)', border:'1px solid rgba(167,199,231,.2)' }}
                        onClick={()=> api.launchApp(`xdg-open "${it.path}"`)}
                        onContextMenu={(e)=>{ e.preventDefault(); if(drawerTab==='desktop' && !it.is_dir) api.setWallpaper(it.path) }}
                   >
@@ -45,7 +45,7 @@ function HomeScreen() {
               </div>
             </div>
           )}
-          <div style={{ marginTop: drawerOpen? 410 : 8 }}>
+      <div style={{ marginTop: drawerOpen? 520 : 8 }}>
             <FileManager />
           </div>
         </div>

@@ -20,22 +20,18 @@ h1 {
 }
 
 button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
+  border-radius: 10px;
+  border: 1px solid rgba(17,24,39,0.25);
+  padding: 0.6em 1.0em;
+  font-size: 0.95em;
+  font-weight: 600;
   font-family: inherit;
-  background-color: var(--color-primary);
+  background: linear-gradient(180deg, #e2ecfb, #c9daf7);
+  color: #102542;
   cursor: pointer;
-  transition: border-color 0.25s;
+  transition: all 0.2s ease;
 }
-button:hover {
-  border-color: var(--color-secondary);
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
+button:hover { filter: brightness(1.03); border-color: #7fa7dd; }
+button:focus, button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
 
 

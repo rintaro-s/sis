@@ -120,10 +120,11 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #ccc;
-  -webkit-transition: .4s;
-  transition: .4s;
+  background: linear-gradient(180deg, #d1d5db, #b7c0cc);
+  -webkit-transition: .2s;
+  transition: .2s;
   border-radius: 20px; /* Rounded track */
+  border: 1px solid rgba(17, 24, 39, 0.25);
 }
 .switch .toggle-slider:before {
   position: absolute;
@@ -138,7 +139,8 @@
   border-radius: 50%; /* Circular thumb */
 }
 .switch input:checked + .toggle-slider {
-  background-color: var(--color-secondary);
+  background: linear-gradient(180deg, #7aa2f7, #5c86e5);
+  border-color: #5478d6;
 }
 .switch input:focus + .toggle-slider {
   box-shadow: 0 0 1px var(--color-secondary);
@@ -148,6 +150,20 @@
   -ms-transform: translateX(22px);
   transform: translateX(22px);
 }
+
+/* Settings footer actions */
+.settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  margin-top: 8px;
+  border-top: 1px solid rgba(167, 199, 231, 0.25);
+}
+.settings-footer .theme-button.primary { background: #2563eb; color: #fff; }
+.settings-footer .theme-button.primary:hover { background: #1d4ed8; }
+.settings-footer .theme-button.secondary { background: #6b7280; color: #fff; }
+.settings-footer .theme-button.secondary:hover { background: #4b5563; }
 
 @media (max-width: 780px) {
   .setting-item {
