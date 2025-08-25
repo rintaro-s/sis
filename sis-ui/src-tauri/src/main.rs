@@ -14,10 +14,14 @@ use std::process::{Command, Stdio};
 use serde::{Serialize, Deserialize};
 use base64::Engine;
 use serde_json;
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashSet, HashMap};
 use serde_json::json;
 use std::env;
 use std::io::Write as _;
+use std::io::Read as _;
+use once_cell::sync::Lazy;
+use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
+use regex;
 
 struct NetworkStats {
     last_received_bytes: u64,
@@ -25,8 +29,368 @@ struct NetworkStats {
     last_update_time: Instant,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct WindowInfo {
+    id: String,
+    wclass: String,
+    title: String,
+    icon_data_url: Option<String>,
+}
+
 // Global overlay running flag
 static OVERLAY_RUNNING: AtomicBool = AtomicBool::new(false);
+
+// Global WM_CLASS to AppInfo mapping cache
+static WM_CLASS_CACHE: Lazy<Mutex<HashMap<String, AppInfo>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+
+fn build_wmclass_cache() {
+    let mut cache = WM_CLASS_CACHE.lock().unwrap();
+    cache.clear();
+    
+    let app_dirs = build_app_dirs();
+    for path in app_dirs.iter() {
+        if path.exists() && path.is_dir() {
+            if let Ok(read) = fs::read_dir(path) {
+                for entry in read.flatten() {
+                    let p = entry.path();
+                    if p.is_file() && p.extension().map_or(false, |e| e=="desktop") {
+                        if let Ok(content) = fs::read_to_string(&p) {
+                            if desktop_hidden_or_settings(&content) { continue; }
+                            let (name, exec, icon_raw, swm) = parse_desktop_fields(&content);
+                            if name.is_empty() || exec.is_empty() || !validate_exec(&exec) { continue; }
+                            
+                            let icon_path = resolve_icon_path(&icon_raw);
+                            let icon_data_url = icon_path.as_ref().and_then(|p| to_data_url(p));
+                            let app_info = AppInfo { name: name.clone(), exec, icon_data_url };
+                            
+                            // Cache by multiple keys
+                            if !swm.is_empty() {
+                                let swm_l = swm.to_lowercase();
+                                cache.insert(swm_l.clone(), app_info.clone());
+                                // Also cache parts
+                                let parts: Vec<&str> = swm_l.split('.').collect();
+                                if parts.len() > 1 {
+                                    cache.insert(parts[0].to_string(), app_info.clone());
+                                    cache.insert(parts[parts.len()-1].to_string(), app_info.clone());
+                                }
+                            }
+                            
+                            // Cache by exec basename
+                            let exec_base = app_info.exec.split_whitespace().next().unwrap_or("");
+                            let exec_bn = std::path::Path::new(exec_base).file_name()
+                                .and_then(|s| s.to_str()).unwrap_or(exec_base).to_lowercase();
+                            if !exec_bn.is_empty() {
+                                cache.insert(exec_bn, app_info.clone());
+                            }
+                            
+                            // Cache by name (lowercase)
+                            cache.insert(name.to_lowercase(), app_info);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn run_out(cmd: &str, args: &[&str]) -> Option<String> {
+    let out = Command::new(cmd).args(args).output().ok()?;
+    if !out.status.success() { return None; }
+    Some(String::from_utf8_lossy(&out.stdout).to_string())
+}
+
+fn parse_xprop_numbers(s: &str) -> Vec<u64> {
+    let mut nums = Vec::new();
+    for token in s.split(|c: char| c == ',' || c.is_whitespace()) {
+        let t = token.trim();
+        if t.is_empty() { continue; }
+        if let Some(hex) = t.strip_prefix("0x") {
+            if let Ok(v) = u64::from_str_radix(hex, 16) { nums.push(v); }
+        } else if let Ok(v) = t.parse::<u64>() {
+            nums.push(v);
+        }
+    }
+    nums
+}
+
+fn net_wm_icon_png_data_url(window_id: &str) -> Option<String> {
+    if !which("xprop") { return None; }
+    let raw = run_out("xprop", &["-id", window_id, "_NET_WM_ICON"])?;
+    if !raw.contains("_NET_WM_ICON") { return None; }
+    let nums = parse_xprop_numbers(&raw);
+    if nums.len() < 3 { return None; }
+    // Parse sequences of [w,h, w*h pixels...]; choose the largest
+    let mut i = 0usize;
+    let mut best: Option<(u32,u32,Vec<u8>)> = None;
+    while i + 2 < nums.len() {
+        let w = nums[i] as usize; let h = nums[i+1] as usize; i += 2;
+        if w == 0 || h == 0 { break; }
+        let need = w.saturating_mul(h);
+        if i + need > nums.len() { break; }
+        // convert ARGB -> RGBA
+        let mut rgba = Vec::with_capacity(need*4);
+        for j in 0..need {
+            let v = nums[i + j] as u32;
+            let a = ((v >> 24) & 0xFF) as u8;
+            let r = ((v >> 16) & 0xFF) as u8;
+            let g = ((v >> 8) & 0xFF) as u8;
+            let b = (v & 0xFF) as u8;
+            rgba.extend_from_slice(&[r,g,b,a]);
+        }
+        i += need;
+        let is_better = match &best { Some((bw,bh,_)) => (w*h) > ((*bw as usize)*(*bh as usize)), None => true };
+        if is_better {
+            best = Some((w as u32, h as u32, rgba));
+        }
+        // continue loop for next image size
+    }
+    let (w, h, rgba) = best?;
+    let buf: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::from_vec(w, h, rgba)?;
+    let img = DynamicImage::ImageRgba8(buf);
+    let png_bytes: Vec<u8> = {
+        let mut cursor = std::io::Cursor::new(Vec::<u8>::new());
+        if img.write_to(&mut cursor, ImageFormat::Png).is_err() { return None; }
+        cursor.into_inner()
+    };
+    log_append("INFO", &format!("net_wm_icon: window={} size={}x{} bytes={}", window_id, w, h, png_bytes.len()));
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
+    Some(format!("data:image/png;base64,{}", b64))
+}
+
+fn xprop_window_pid(window_id: &str) -> Option<u32> {
+    if !which("xprop") { return None; }
+    let raw = run_out("xprop", &["-id", window_id, "_NET_WM_PID"]) ?;
+    for line in raw.lines() {
+        if let Some(rest) = line.split('=').nth(1) {
+            if let Ok(v) = rest.trim().parse::<u32>() {
+                log_append("INFO", &format!("xprop pid: window={} pid={}", window_id, v));
+                return Some(v);
+            }
+        }
+    }
+    None
+}
+
+fn xprop_window_wm_class(window_id: &str) -> Option<String> {
+    if !which("xprop") { return None; }
+    let raw = run_out("xprop", &["-id", window_id, "WM_CLASS"]) ?;
+    // Example: WM_CLASS(STRING) = "code", "Code"
+    for line in raw.lines() {
+        if let Some(rest) = line.split('=').nth(1) {
+            let s = rest.trim();
+            // take first token inside quotes before comma
+            // e.g. "code", "Code" -> code.Code
+            let parts: Vec<&str> = s.split(',').collect();
+            if !parts.is_empty() {
+                let left = parts[0].trim().trim_matches('"');
+                let right = if parts.len() > 1 { parts[1].trim().trim_matches('"') } else { "" };
+                let combined = if !right.is_empty() { format!("{}.{}", left, right) } else { left.to_string() };
+                if !combined.is_empty() { return Some(combined); }
+            }
+        }
+    }
+    None
+}
+
+fn read_proc_comm(pid: u32) -> Option<String> {
+    let p = format!("/proc/{}/comm", pid);
+    std::fs::read_to_string(p).ok().map(|s| s.trim().to_string())
+}
+
+fn read_proc_environ(pid: u32) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    let path = format!("/proc/{}/environ", pid);
+    if let Ok(mut f) = fs::File::open(&path) {
+        let mut bytes = Vec::new();
+        if f.read_to_end(&mut bytes).is_ok() {
+            for chunk in bytes.split(|b| *b == 0u8) {
+                if let Some(eq) = chunk.iter().position(|b| *b == b'=') {
+                    let k = String::from_utf8_lossy(&chunk[..eq]).to_string();
+                    let v = String::from_utf8_lossy(&chunk[eq+1..]).to_string();
+                    if !k.is_empty() { map.insert(k, v); }
+                }
+            }
+        }
+    }
+    map
+}
+
+fn search_snap_desktop_icon(prefix: &str) -> Option<std::path::PathBuf> {
+    use std::fs;
+    let dir = std::path::Path::new("/var/lib/snapd/desktop/icons");
+    if !dir.exists() { return None; }
+    if let Ok(read) = fs::read_dir(dir) {
+        for e in read.flatten() {
+            let p = e.path();
+            if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
+                let lname = name.to_lowercase();
+                if (lname.starts_with(&prefix.to_lowercase())) && (lname.ends_with(".png") || lname.ends_with(".svg")) {
+                    if p.exists() { return Some(p); }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn find_desktop_by_prefix(dir: &Path, prefix: &str) -> Option<PathBuf> {
+    if !dir.exists() { return None; }
+    if let Ok(read) = fs::read_dir(dir) {
+        for e in read.flatten() {
+            let p = e.path();
+            if p.extension().and_then(|s| s.to_str()) == Some("desktop") {
+                if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
+                    if name.to_lowercase().starts_with(&prefix.to_lowercase()) { return Some(p); }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn icon_from_desktop_file(path: &Path) -> Option<PathBuf> {
+    if !path.exists() { return None; }
+    if let Ok(content) = fs::read_to_string(path) {
+        if let Some(icon_raw) = content.lines().find(|l| l.starts_with("Icon=")).and_then(|l| l.splitn(2,'=').nth(1)) {
+            let icon_raw = icon_raw.trim();
+            if let Some(p) = resolve_icon_path(icon_raw) { return Some(p); }
+            // snap desktop icons fallback dir
+            for ext in ["png","svg"] {
+                let p = PathBuf::from("/var/lib/snapd/desktop/icons").join(format!("{}.{}", icon_raw, ext));
+                if p.exists() { return Some(p); }
+            }
+        }
+    }
+    None
+}
+
+fn read_proc_exe(pid: u32) -> Option<PathBuf> {
+    let p = format!("/proc/{}/exe", pid);
+    fs::read_link(p).ok()
+}
+
+fn try_snap_icon_from_env(envs: &HashMap<String,String>) -> Option<PathBuf> {
+    let snap_name = envs.get("SNAP_NAME").or_else(|| envs.get("SNAP_INSTANCE_NAME")).cloned();
+    let snap = snap_name?;
+    // Try desktop entry under snapd applications
+    let apps_dir = PathBuf::from("/var/lib/snapd/desktop/applications");
+    if apps_dir.exists() {
+        if let Ok(read) = fs::read_dir(&apps_dir) {
+            for e in read.flatten() {
+                let p = e.path();
+                if p.extension().and_then(|s| s.to_str()) == Some("desktop") {
+                    let fname = p.file_name().and_then(|s| s.to_str()).unwrap_or("").to_string();
+                    if fname.starts_with(&format!("{}_", snap)) || fname.starts_with(&format!("{}.", snap)) || fname.starts_with(&snap) {
+                        if let Ok(content) = fs::read_to_string(&p) {
+                            if let Some(icon_raw) = content.lines().find(|l| l.starts_with("Icon=")).and_then(|l| l.splitn(2,'=').nth(1)) {
+                                let icon_raw = icon_raw.trim();
+                                if let Some(pp) = resolve_icon_path(icon_raw) { return Some(pp); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Try meta/gui under mounted snap path
+    if let Some(snap_mnt) = envs.get("SNAP") {
+        let base = PathBuf::from(snap_mnt).join("meta").join("gui");
+        for name in [format!("{}.png", snap), format!("{}.svg", snap), "icon.png".into(), "icon.svg".into()] {
+            let p = base.join(&name);
+            if p.exists() { return Some(p); }
+        }
+    }
+    None
+}
+
+fn try_flatpak_icon_from_env(envs: &HashMap<String,String>) -> Option<PathBuf> {
+    if let Some(id) = envs.get("FLATPAK_ID") {
+        if let Some(p) = resolve_icon_path(id) { return Some(p); }
+    }
+    None
+}
+
+fn try_appimage_icon_for_exe(exe: &Path) -> Option<PathBuf> {
+    let p = exe;
+    if p.extension().and_then(|s| s.to_str()).map(|s| s.eq_ignore_ascii_case("AppImage")).unwrap_or(false) {
+        let png = p.with_extension("png");
+        if png.exists() { return Some(png); }
+        let svg = p.with_extension("svg");
+        if svg.exists() { return Some(svg); }
+    }
+    None
+}
+
+fn fallback_icon_from_pid(pid: u32) -> Option<String> {
+    let envs = read_proc_environ(pid);
+    if let Some(p) = try_snap_icon_from_env(&envs) { log_append("INFO", &format!("icon from snap env: pid={} path={}", pid, p.to_string_lossy())); return to_data_url(&p); }
+    if let Some(p) = try_flatpak_icon_from_env(&envs) { log_append("INFO", &format!("icon from flatpak env: pid={} path={}", pid, p.to_string_lossy())); return to_data_url(&p); }
+    if let Some(exe) = read_proc_exe(pid) {
+        if let Some(p) = try_appimage_icon_for_exe(&exe) { log_append("INFO", &format!("icon from AppImage: pid={} path={}", pid, p.to_string_lossy())); return to_data_url(&p); }
+        if let Some(name) = exe.file_name().and_then(|s| s.to_str()) {
+            if let Some(p) = resolve_icon_path(name) { log_append("INFO", &format!("icon from exec name: pid={} name={} path={}", pid, name, p.to_string_lossy())); return to_data_url(&p); }
+            if let Some((stem, _)) = name.rsplit_once('.') {
+                if let Some(p) = resolve_icon_path(stem) { log_append("INFO", &format!("icon from exec stem: pid={} stem={} path={}", pid, stem, p.to_string_lossy())); return to_data_url(&p); }
+            }
+        }
+    }
+    None
+}
+
+fn guess_icon_candidates(wclass: &str, title: &str, exe: Option<&std::path::Path>, comm: Option<&str>) -> Vec<String> {
+    use std::collections::HashSet;
+    let wl = wclass.to_lowercase();
+    let tl = title.to_lowercase();
+    let mut set: HashSet<String> = HashSet::new();
+    let mut add = |s: &str| { if !s.is_empty() { set.insert(s.to_string()); }};
+
+    // Tokenize WM_CLASS like "evince.Evince" or "gnome-terminal-server.Gnome-terminal"
+    for part in wl.split(|c: char| c == '.' || c == ' ' || c == '-' || c == '_') {
+        if part.len() >= 3 { add(part); }
+    }
+
+    // Exec/comm basenames
+    if let Some(p) = exe { if let Some(name) = p.file_name().and_then(|s| s.to_str()) { add(&name.to_lowercase()); add(name); }}
+    if let Some(c) = comm { add(&c.to_lowercase()); add(c); }
+
+    // Browsers
+    if tl.contains("vivaldi") { add("vivaldi"); }
+    if tl.contains("firefox") || wl.contains("firefox") { add("firefox"); }
+    if tl.contains("chromium") { add("chromium"); }
+    if tl.contains("google chrome") || wl.contains("chrome") { add("google-chrome"); add("chrome"); }
+
+    // Editors/IDE
+    if tl.contains("visual studio code") || wl.contains("code") { add("code"); add("visual-studio-code"); }
+
+    // Calculator (日本語: 電卓)
+    if tl.contains("電卓") || tl.contains("calculator") { add("gnome-calculator"); add("calculator"); }
+
+    // PDF viewers
+    if tl.ends_with(".pdf") || wl.contains("evince") || tl.contains("evince") {
+        add("org.gnome.Evince"); add("evince"); add("document-viewer");
+    }
+    if wl.contains("atril") || tl.contains("atril") { add("atril"); add("org.mate.atril"); }
+    if wl.contains("xreader") || tl.contains("xreader") { add("xreader"); }
+    if wl.contains("okular") || tl.contains("okular") { add("okular"); }
+
+    // Terminals
+    let is_terminal_title = tl.contains("terminal") || tl.contains(": ~") || (tl.contains("@") && tl.contains(": "));
+    if is_terminal_title || wl.contains("terminal") {
+        add("org.gnome.Terminal"); add("gnome-terminal"); add("utilities-terminal"); add("terminal");
+        add("xfce4-terminal"); add("konsole"); add("kitty"); add("Alacritty"); add("alacritty");
+    }
+
+    // LM Studio
+    if wl.contains("lm") && wl.contains("studio") || tl.contains("lm studio") { add("lm-studio"); add("lmstudio"); }
+
+    // Generic fallbacks
+    add("application-x-executable");
+    add("application-default-icon");
+    add("applications-system");
+
+    // Return in insertion order approximation
+    set.into_iter().collect()
+}
 
 fn read_net_totals() -> (u64, u64) {
     // Sum rx/tx bytes from /proc/net/dev (Linux前提)
@@ -263,47 +627,76 @@ fn resolve_icon_path(raw: &str) -> Option<std::path::PathBuf> {
     if raw.trim().is_empty() { return None; }
     let p = Path::new(raw);
     if p.is_absolute() && p.exists() { return Some(p.to_path_buf()); }
-    // Try common icon lookup paths
-    let mut candidates: Vec<PathBuf> = vec![];
     let exts = ["png", "svg", "xpm"]; // webkit supports png/svg well
     let sizes = ["512x512","256x256","128x128","64x64","48x48","32x32","24x24","16x16"];
-    if let Some(home) = dirs::home_dir() {
-        candidates.push(home.join(".local/share/icons"));
-        candidates.push(home.join(".icons"));
-    }
-    candidates.push(PathBuf::from("/usr/share/icons"));
-    candidates.push(PathBuf::from("/usr/share/pixmaps"));
-    // Include common theme names directly
-    for theme in ["hicolor","Papirus","Adwaita","Yaru","Numix","Humanity"] {
-        if let Some(home) = dirs::home_dir() {
-            candidates.push(home.join(format!(".icons/{theme}")));
-            candidates.push(home.join(format!(".local/share/icons/{theme}")));
-        }
-        candidates.push(PathBuf::from(format!("/usr/share/icons/{theme}")));
-    }
-    // Flatpak exports
-    if let Some(home) = dirs::home_dir() {
-        candidates.push(home.join(".local/share/flatpak/exports/share/icons"));
-    }
-    candidates.push(PathBuf::from("/var/lib/flatpak/exports/share/icons"));
+    let themes = ["hicolor","Papirus","Adwaita","Yaru","Numix","Humanity"];
 
-    for base in candidates {
-        // hicolor theme typical layout
-        for size in &sizes {
-            for ext in &exts {
-                let p1 = base.join("hicolor").join(size).join("apps").join(format!("{}.{}", raw, ext));
-                if p1.exists() { return Some(p1); }
+    // Build search roots
+    let mut roots: Vec<PathBuf> = vec![];
+    if let Some(home) = dirs::home_dir() {
+        roots.push(home.join(".local/share/icons"));
+        roots.push(home.join(".icons"));
+        roots.push(home.join(".local/share/flatpak/exports/share/icons"));
+    }
+    roots.push(PathBuf::from("/usr/share/icons"));
+    roots.push(PathBuf::from("/usr/share/pixmaps"));
+    roots.push(PathBuf::from("/var/lib/flatpak/exports/share/icons"));
+    roots.push(PathBuf::from("/var/lib/snapd/desktop/icons"));
+    // Add theme roots explicitly
+    for theme in themes.iter() {
+        if let Some(home) = dirs::home_dir() {
+            roots.push(home.join(format!(".icons/{theme}")));
+            roots.push(home.join(format!(".local/share/icons/{theme}")));
+        }
+        roots.push(PathBuf::from(format!("/usr/share/icons/{theme}")));
+    }
+
+    for base in roots {
+        // If base looks like a theme root (ends with a known theme), search sizes and scalable
+        let is_theme_root = base.file_name().and_then(|s| s.to_str()).map(|s| themes.contains(&s)).unwrap_or(false);
+        if is_theme_root {
+            // sized icons
+            for size in &sizes {
+                for ext in &exts {
+                    let p1 = base.join(size).join("apps").join(format!("{}.{}", raw, ext));
+                    if p1.exists() { return Some(p1); }
+                }
             }
-        }
-        // flat under theme or pixmaps
-        for ext in &exts {
-            let p2 = base.join(format!("{}.{}", raw, ext));
-            if p2.exists() { return Some(p2); }
-        }
-        // apps subdir without size
-        for ext in &exts {
-            let p3 = base.join("apps").join(format!("{}.{}", raw, ext));
-            if p3.exists() { return Some(p3); }
+            // scalable svg
+            let psvg = base.join("scalable").join("apps").join(format!("{}.svg", raw));
+            if psvg.exists() { return Some(psvg); }
+            // theme/apps flat
+            for ext in &exts {
+                let p3 = base.join("apps").join(format!("{}.{}", raw, ext));
+                if p3.exists() { return Some(p3); }
+            }
+        } else {
+            // generic base: try each theme under it
+            for theme in themes.iter() {
+                let troot = base.join(theme);
+                for size in &sizes {
+                    for ext in &exts {
+                        let p1 = troot.join(size).join("apps").join(format!("{}.{}", raw, ext));
+                        if p1.exists() { return Some(p1); }
+                    }
+                }
+                let psvg = troot.join("scalable").join("apps").join(format!("{}.svg", raw));
+                if psvg.exists() { return Some(psvg); }
+                for ext in &exts {
+                    let p3 = troot.join("apps").join(format!("{}.{}", raw, ext));
+                    if p3.exists() { return Some(p3); }
+                }
+            }
+            // also try flat files in generic base
+            for ext in &exts {
+                let p2 = base.join(format!("{}.{}", raw, ext));
+                if p2.exists() { return Some(p2); }
+            }
+            // and apps subdir without theme
+            for ext in &exts {
+                let p3 = base.join("apps").join(format!("{}.{}", raw, ext));
+                if p3.exists() { return Some(p3); }
+            }
         }
     }
     None
@@ -362,13 +755,8 @@ fn get_recent_apps() -> Result<Vec<AppInfo>, String> {
                 let path = entry.path();
                 if path.is_file() && path.extension().map_or(false, |ext| ext == "desktop") {
                     if let Ok(content) = fs::read_to_string(&path) {
-                        // Skip hidden/NoDisplay entries and settings sub-panels
-                        let hidden = content.lines().any(|l| l.trim() == "Hidden=true")
-                            || content.lines().any(|l| l.trim() == "NoDisplay=true");
-                        if hidden { continue; }
-                        if content.lines().any(|l| l.starts_with("X-GNOME-Settings-Panel")) { continue; }
-                        if content.lines().any(|l| l.starts_with("Exec=gnome-control-center")) { continue; }
-                        if content.lines().any(|l| l.starts_with("Exec=xfce4-settings-manager")) && content.contains("--dialog") { continue; }
+                        // Skip hidden/system/setting entries
+                        if desktop_hidden_or_settings(&content) { continue; }
                         let name = parse_localized_name(&content);
                         let mut exec = content.lines()
                             .find(|line| line.starts_with("Exec="))
@@ -379,20 +767,11 @@ fn get_recent_apps() -> Result<Vec<AppInfo>, String> {
                             .and_then(|line| line.strip_prefix("Icon="))
                             .unwrap_or("").trim().to_string();
                         // Strip desktop entry field codes like %U, %u, %f, %F etc.
-                        for code in ["%U", "%u", "%F", "%f", "%i", "%c", "%k"].iter() {
-                            exec = exec.replace(code, "");
-                        }
-                        // Validate first token exists in PATH (basic runnable filter)
-                        let mut tokens = exec.split_whitespace();
-                        let mut first = tokens.next().unwrap_or("");
-                        if first == "env" { first = tokens.next().unwrap_or(first); }
-                        if !name.is_empty() && !exec.is_empty() {
-                            let base = std::path::Path::new(first).file_name().and_then(|s| s.to_str()).unwrap_or(first);
-                            if !base.is_empty() && which(base) {
-                                let icon_path = resolve_icon_path(&icon_raw);
-                                let icon_data_url = icon_path.as_ref().and_then(|p| to_data_url(p));
-                                apps.push(AppInfo { name, exec, icon_data_url });
-                            }
+                        for code in ["%U", "%u", "%F", "%f", "%i", "%c", "%k"].iter() { exec = exec.replace(code, ""); }
+                        if !name.is_empty() && !exec.is_empty() && validate_exec(&exec) {
+                            let icon_path = resolve_icon_path(&icon_raw);
+                            let icon_data_url = icon_path.as_ref().and_then(|p| to_data_url(p));
+                            apps.push(AppInfo { name, exec, icon_data_url });
                         }
                     }
                 }
@@ -418,6 +797,34 @@ fn get_recent_apps() -> Result<Vec<AppInfo>, String> {
         .collect::<Vec<_>>();
     merge_apps(&mut apps, &mut hist);
     Ok(apps)
+}
+
+fn icon_from_wmclass_shortcut(wclass: &str, title: &str) -> Option<String> {
+    let wl = wclass.to_lowercase();
+    let tl = title.to_lowercase();
+    // Evince (PDF viewer)
+    if wl.contains("evince") || tl.ends_with(".pdf") {
+        if let Some(p) = resolve_icon_path("org.gnome.Evince") { log_append("INFO", &format!("wmclass shortcut: Evince -> {}", p.to_string_lossy())); return to_data_url(&p); }
+        if let Some(p) = resolve_icon_path("evince") { log_append("INFO", &format!("wmclass shortcut: evince -> {}", p.to_string_lossy())); return to_data_url(&p); }
+    }
+    // GNOME Terminal
+    if wl.contains("gnome-terminal") || tl.contains("terminal") {
+        if let Some(p) = resolve_icon_path("org.gnome.Terminal") { log_append("INFO", &format!("wmclass shortcut: Terminal -> {}", p.to_string_lossy())); return to_data_url(&p); }
+        if let Some(p) = resolve_icon_path("gnome-terminal") { log_append("INFO", &format!("wmclass shortcut: gnome-terminal -> {}", p.to_string_lossy())); return to_data_url(&p); }
+        if let Some(p) = resolve_icon_path("utilities-terminal") { log_append("INFO", &format!("wmclass shortcut: utilities-terminal -> {}", p.to_string_lossy())); return to_data_url(&p); }
+    }
+    // Vivaldi (snap)
+    if wl.contains("vivaldi") {
+        // try snap desktop files
+        let dir = Path::new("/var/lib/snapd/desktop/applications");
+        if let Some(desktop) = find_desktop_by_prefix(dir, "vivaldi_") {
+            if let Some(p) = icon_from_desktop_file(&desktop) { log_append("INFO", &format!("wmclass shortcut: vivaldi desktop icon -> {}", p.to_string_lossy())); return to_data_url(&p); }
+        }
+        // direct icon search by name
+        if let Some(p) = search_snap_desktop_icon("vivaldi") { log_append("INFO", &format!("wmclass shortcut: vivaldi snap icon -> {}", p.to_string_lossy())); return to_data_url(&p); }
+        if let Some(p) = resolve_icon_path("vivaldi") { log_append("INFO", &format!("wmclass shortcut: vivaldi -> {}", p.to_string_lossy())); return to_data_url(&p); }
+    }
+    None
 }
 
 fn merge_apps(dst: &mut Vec<AppInfo>, src: &mut Vec<AppInfo>) {
@@ -498,6 +905,17 @@ fn desktop_hidden_or_settings(content: &str) -> bool {
     if content.lines().any(|l| l.starts_with("X-GNOME-Settings-Panel")) { return true; }
     if content.lines().any(|l| l.starts_with("Exec=gnome-control-center")) { return true; }
     if content.lines().any(|l| l.starts_with("Exec=xfce4-settings-manager")) && content.contains("--dialog") { return true; }
+    // Default-hide some system tools: Document Viewer, Startup Disk Creator, NVIDIA Settings, GNOME System Monitor, Workspace
+    let name = parse_localized_name(content).to_lowercase();
+    let exec = content.lines().find(|l| l.starts_with("Exec=")).and_then(|l| l.strip_prefix("Exec=")).unwrap_or("").to_lowercase();
+    let deny_names = [
+        "document viewer", "ドキュメントビューア", "startup disk creator",
+        "nvidia x server settings", "nvidia settings", "system monitor",
+        "workspace", "workspaces", "ワークスペース"
+    ];
+    if deny_names.iter().any(|k| name.contains(k)) { return true; }
+    let deny_exec = ["gnome-system-monitor", "nvidia-settings", "usb-creator-gtk", "usb-creator-kde"];
+    if deny_exec.iter().any(|k| exec.contains(k)) { return true; }
     false
 }
 
@@ -510,66 +928,173 @@ fn normalize_wclass(wc: &str) -> (String, String, String) {
 }
 
 fn validate_exec(exec: &str) -> bool {
-    let mut tokens = exec.split_whitespace();
-    let mut first = tokens.next().unwrap_or("");
-    if first == "env" { first = tokens.next().unwrap_or(first); }
-    let base = std::path::Path::new(first).file_name().and_then(|s| s.to_str()).unwrap_or(first);
-    if base.is_empty() { return false; }
-    which(base) || (Path::new(first).is_absolute() && Path::new(first).exists())
+    // Extract plausible executable token from Exec line
+    fn extract_exec_token(s: &str) -> Option<String> {
+        let mut tokens = s.split_whitespace().peekable();
+        let mut last_was_dash_c = false;
+        while let Some(tok) = tokens.next() {
+            let t = tok.trim_matches(['"', '\'', ' '].as_ref());
+            if t.is_empty() { continue; }
+            if t == "env" || t == "sh" || t == "bash" || t == "zsh" || t == "flatpak" { continue; }
+            if t.starts_with('-') { last_was_dash_c = t == "-c" || t == "-lc"; continue; }
+            if t.contains('=') { continue; } // environment assignment
+            let mut candidate = t.to_string();
+            if last_was_dash_c {
+                // token may be a quoted command string; take the first word inside
+                if let Some(space) = candidate.find(' ') { candidate.truncate(space); }
+                candidate = candidate.trim_matches(['"', '\'', ' '].as_ref()).to_string();
+            }
+            if !candidate.is_empty() { return Some(candidate); }
+        }
+        None
+    }
+    if let Some(first) = extract_exec_token(exec) {
+        let base = std::path::Path::new(&first).file_name().and_then(|s| s.to_str()).unwrap_or(&first);
+        if base.is_empty() { return false; }
+        which(base) || (Path::new(&first).is_absolute() && Path::new(&first).exists())
+    } else { false }
 }
 
 fn match_desktop_to_window(wclass: &str, title: &str) -> Option<AppInfo> {
+    let cache = WM_CLASS_CACHE.lock().unwrap();
     let (wcl, wcf, wclast) = normalize_wclass(wclass);
+    
+    // Try exact matches first
+    if let Some(app) = cache.get(&wcl) { return Some(app.clone()); }
+    if let Some(app) = cache.get(&wcf) { return Some(app.clone()); }
+    if let Some(app) = cache.get(&wclast) { return Some(app.clone()); }
+    
+    // Try partial matches by title
     let title_l = title.to_lowercase();
-    let app_dirs = build_app_dirs();
-    let mut fallback: Option<AppInfo> = None;
-    for path in app_dirs.iter() {
-        if path.exists() && path.is_dir() {
-            if let Ok(read) = fs::read_dir(path) {
-                for entry in read.flatten() {
-                    let p = entry.path();
-                    if p.is_file() && p.extension().map_or(false, |e| e=="desktop") {
-                        if let Ok(content) = fs::read_to_string(&p) {
-                            if desktop_hidden_or_settings(&content) { continue; }
-                            let (name, exec, icon_raw, swm) = parse_desktop_fields(&content);
-                            if name.is_empty() || exec.is_empty() || !validate_exec(&exec) { continue; }
-                            let swm_l = swm.to_lowercase();
-                            if !swm_l.is_empty() {
-                                if swm_l == wcl || swm_l == wcf || swm_l == wclast { // strong match (全体/先頭/末尾)
-                                    let icon_path = resolve_icon_path(&icon_raw);
-                                    let icon_data_url = icon_path.as_ref().and_then(|p| to_data_url(p));
-                                    return Some(AppInfo { name, exec, icon_data_url });
-                                }
-                            }
-                            // weaker: title contains app name
-                            let name_l = name.to_lowercase();
-                            if !name_l.is_empty() && (title_l.contains(&name_l) || name_l.contains(&title_l)) {
-                                let icon_path = resolve_icon_path(&icon_raw);
-                                let icon_data_url = icon_path.as_ref().and_then(|p| to_data_url(p));
-                                let app = AppInfo { name: name.clone(), exec: exec.clone(), icon_data_url: icon_data_url.clone() };
-                                if fallback.is_none() { fallback = Some(app); }
-                            }
-                            // weaker2: Execのベース名がWM_CLASSの成分に一致
-                            let exec_base = exec.split_whitespace().next().unwrap_or("");
-                            let exec_bn = std::path::Path::new(exec_base).file_name().and_then(|s| s.to_str()).unwrap_or(exec_base).to_lowercase();
-                            if !exec_bn.is_empty() && (exec_bn == wcf || exec_bn == wclast) {
-                                let icon_path = resolve_icon_path(&icon_raw);
-                                let icon_data_url = icon_path.as_ref().and_then(|p| to_data_url(p));
-                                let app = AppInfo { name: name.clone(), exec: exec.clone(), icon_data_url };
-                                if fallback.is_none() { fallback = Some(app); }
-                            }
-                        }
-                    }
-                }
-            }
+    for (key, app) in cache.iter() {
+        if title_l.contains(key) || key.contains(&title_l) {
+            return Some(app.clone());
         }
     }
-    fallback
+    
+    None
+}
+
+#[tauri::command]
+fn file_to_data_url(path: String) -> Result<String, String> {
+    let p = PathBuf::from(&path);
+    if !p.exists() { return Err("file-not-found".into()); }
+    
+    // Check if it's an image file
+    let mime = mime_guess::from_path(&p).first_or_octet_stream();
+    if mime.type_() != "image" {
+        return Err("not-an-image".into());
+    }
+    
+    match std::fs::read(&p) {
+        Ok(bytes) => {
+            let mime_str = mime.to_string();
+            let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+            Ok(format!("data:{};base64,{}", mime_str, b64))
+        }
+        Err(e) => Err(format!("read-error: {}", e))
+    }
 }
 
 #[tauri::command]
 fn resolve_window_app(wclass: String, title: String) -> Result<AppInfo, String> {
     match match_desktop_to_window(&wclass, &title) { Some(app) => Ok(app), None => Err("not-found".into()) }
+}
+
+#[tauri::command]
+fn resolve_window_icon(window_id: String, wclass: String, title: String) -> Result<AppInfo, String> {
+    log_append("INFO", &format!("resolve_window_icon: id={} wclass={} title={}", window_id, wclass, title));
+    // 1) Try cache-based .desktop matching first
+    if let Some(app) = match_desktop_to_window(&wclass, &title) {
+        if app.icon_data_url.is_some() { log_append("INFO", "cache hit with icon"); return Ok(app); }
+    }
+    // 2) Try _NET_WM_ICON directly
+    if let Some(data_url) = net_wm_icon_png_data_url(&window_id) {
+        let name = if !title.trim().is_empty() { title.clone() } else { wclass.clone() };
+        log_append("INFO", "_NET_WM_ICON extracted");
+        return Ok(AppInfo { name, exec: "".into(), icon_data_url: Some(data_url) });
+    } else { log_append("INFO", "_NET_WM_ICON not present or parse failed"); }
+    // 2a) Quick WM_CLASS-based shortcuts for common apps
+    if let Some(data_url) = icon_from_wmclass_shortcut(&wclass, &title) {
+        let name = if !title.trim().is_empty() { title.clone() } else { wclass.clone() };
+        return Ok(AppInfo { name, exec: "".into(), icon_data_url: Some(data_url) });
+    }
+    // 3) Try PID -> process mapping -> icon
+    if let Some(pid) = xprop_window_pid(&window_id) {
+        if let Some(data_url) = fallback_icon_from_pid(pid) {
+            let name = if !title.trim().is_empty() { title.clone() } else { wclass.clone() };
+            let exec = read_proc_exe(pid).map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+            log_append("INFO", &format!("pid fallback icon resolved: pid={} exec={}", pid, exec));
+            return Ok(AppInfo { name, exec, icon_data_url: Some(data_url) });
+        }
+        // 4) Heuristic guesses based on wmclass/title/exe/comm
+        let exe = read_proc_exe(pid);
+        let comm = read_proc_comm(pid);
+        let candidates = guess_icon_candidates(&wclass, &title, exe.as_deref(), comm.as_deref());
+        log_append("INFO", &format!("heuristic candidates: pid={} count={} first={} wclass={} title={}", pid, candidates.len(), candidates.get(0).cloned().unwrap_or_default(), wclass, title));
+        for icon_name in candidates {
+            log_append("INFO", &format!("heuristic try: pid={} name={}", pid, icon_name));
+            if let Some(p) = resolve_icon_path(&icon_name) {
+                if let Some(data) = to_data_url(&p) {
+                    log_append("INFO", &format!("heuristic icon: pid={} name={} path={}", pid, icon_name, p.to_string_lossy()));
+                    let exec = exe.as_ref().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+                    return Ok(AppInfo { name: title.clone(), exec, icon_data_url: Some(data) });
+                }
+            } else {
+                log_append("INFO", &format!("heuristic miss: pid={} name={}", pid, icon_name));
+            }
+        }
+    }
+    // 5) Final heuristics without PID (e.g., when env lookup fails): use WM_CLASS/title only
+    let candidates = guess_icon_candidates(&wclass, &title, None, None);
+    log_append("INFO", &format!("heuristic candidates (no pid): count={} first={} wclass={} title={}", candidates.len(), candidates.get(0).cloned().unwrap_or_default(), wclass, title));
+    for icon_name in candidates {
+        log_append("INFO", &format!("heuristic try (no pid): name={}", icon_name));
+        if let Some(p) = resolve_icon_path(&icon_name) {
+            if let Some(data) = to_data_url(&p) {
+                log_append("INFO", &format!("heuristic icon (no pid): name={} path={}", icon_name, p.to_string_lossy()));
+                let name = if !title.trim().is_empty() { title.clone() } else { wclass.clone() };
+                return Ok(AppInfo { name, exec: "".into(), icon_data_url: Some(data) });
+            }
+        }
+    }
+    log_append("WARN", "resolve_window_icon: not found");
+    Err("not-found".into())
+}
+
+#[tauri::command]
+fn get_open_windows_with_icons() -> Result<Vec<WindowInfo>, String> {
+    // Collect windows via wmctrl and resolve icons server-side so logs show resolution path
+    log_append("INFO", "get_open_windows_with_icons: start");
+    let text = match run_out("sh", &["-lc", "wmctrl -lx 2>/dev/null"]) {
+        Some(s) => s,
+        None => { log_append("WARN", "get_open_windows_with_icons: wmctrl returned none"); return Ok(Vec::new()) },
+    };
+    let mut out: Vec<WindowInfo> = Vec::new();
+    for line in text.lines() {
+        // Format: ID DESKTOP HOSTNAME WM_CLASS TITLE
+        // We match first token as id, then take next two tokens, then one token for wclass, rest as title
+        let re = regex::Regex::new(r"^(\S+)\s+\S+\s+\S+\s+(\S+)\s+(.*)$").unwrap();
+        if let Some(caps) = re.captures(line) {
+            let id = caps.get(1).unwrap().as_str().to_string();
+            let mut wclass = caps.get(2).unwrap().as_str().to_string();
+            let title = caps.get(3).unwrap().as_str().trim().to_string();
+            if title.is_empty() { continue; }
+            // Improve WM_CLASS accuracy via xprop
+            if let Some(xw) = xprop_window_wm_class(&id) {
+                log_append("INFO", &format!("xprop WM_CLASS: id={} wm_class={}", id, xw));
+                wclass = xw;
+            }
+            let mut icon: Option<String> = None;
+            match resolve_window_icon(id.clone(), wclass.clone(), title.clone()) {
+                Ok(app) => { icon = app.icon_data_url; log_append("INFO", &format!("get_open_windows_with_icons: icon ok id={} title={} has_icon={}", id, title, icon.is_some())); }
+                Err(e) => { log_append("WARN", &format!("get_open_windows_with_icons: resolve failed id={} title={} err={}", id, title, e)); }
+            }
+            out.push(WindowInfo { id, wclass, title, icon_data_url: icon });
+        }
+    }
+    log_append("INFO", &format!("get_open_windows_with_icons: done items={}", out.len()));
+    Ok(out)
 }
 
 #[tauri::command]
@@ -793,6 +1318,9 @@ fn main() {
         .manage(network_stats)
     .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
+            // Build WM_CLASS cache on startup
+            build_wmclass_cache();
+            
             // get window (webview) in a Tauri-compatible way
             // Prefer get_webview_window (returns Option<Window>), fallback to AppHandle.get_window if present
             let window = app.get_webview_window("main").or_else(|| {
@@ -832,7 +1360,10 @@ fn main() {
             next_track,
             previous_track,
             launch_app,
+            file_to_data_url,
             resolve_window_app,
+            resolve_window_icon,
+            get_open_windows_with_icons,
             record_launch_guess,
             overlay_start,
             overlay_stop,
@@ -1038,7 +1569,8 @@ fn run_safe_command(cmdline: String) -> Result<String, String> {
     let allow = [
         "xdg-open","ls","cp","mv","mkdir","tar","zip","unzip",
         "playerctl","pactl","brightnessctl","nmcli","rfkill","gnome-screenshot",
-        "kdeconnect-cli","clamscan","echo","wmctrl","zenity","kdialog","base64"
+        "kdeconnect-cli","clamscan","echo","wmctrl","zenity","kdialog","base64",
+        "sh","bash","sed"
     ];
     if !allow.contains(&base) { return Err(format!("command-not-allowed: {}", base)); }
     if trimmed.contains(" rm ") || trimmed.starts_with("rm ") || trimmed.contains(" sudo ") {
@@ -1385,6 +1917,9 @@ fn list_documents_items() -> Result<Vec<DesktopItem>, String> {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct DeSettings {
+    // UI appearance
+    theme: Option<String>,            // "system" | "light" | "dark"
+    wallpaper: Option<String>,        // path or data/url(...)
     llm_remote_url: Option<String>,
     llm_api_key: Option<String>,
     llm_model: Option<String>,
@@ -1395,7 +1930,7 @@ struct DeSettings {
     user_dirs: Option<serde_json::Value>, // { downloads, music, pictures, documents, videos, desktop }
     app_sort: Option<String>, // name|recent
     favorite_order: Option<Vec<String>>, // favorite app names
-    logging_enabled: Option<bool>,
+    logging_enabled: Option<bool>,    // backend log toggle
 }
 
 fn settings_dir() -> Option<PathBuf> { history_dir() }
@@ -1410,6 +1945,8 @@ fn read_settings() -> DeSettings {
         }
     }
     DeSettings{ 
+        theme: Some("system".into()),
+        wallpaper: None,
         llm_remote_url: Some("http://localhost:1234/v1/chat/completions".into()),
         llm_api_key: None,
         llm_model: Some("qwen3-14b@q4_k_m".into()),
@@ -1419,8 +1956,8 @@ fn read_settings() -> DeSettings {
         local_model_path: None,
         user_dirs: None,
         app_sort: Some("name".into()),
-    favorite_order: None,
-    logging_enabled: Some(false),
+        favorite_order: None,
+        logging_enabled: Some(true),
     }
 }
 
@@ -1436,10 +1973,26 @@ fn get_settings() -> Result<DeSettings, String> { Ok(read_settings()) }
 
 #[tauri::command]
 fn set_settings(new_s: DeSettings) -> Result<String, String> {
-    write_settings(&new_s);
+    // Merge with existing settings to avoid dropping fields
+    let mut cur = read_settings();
+    // Primitive merge: prefer incoming if Some/true; keep existing otherwise
+    if let Some(v) = new_s.theme { cur.theme = Some(v); }
+    if let Some(v) = new_s.wallpaper { cur.wallpaper = Some(v); }
+    if let Some(v) = new_s.llm_remote_url { cur.llm_remote_url = Some(v); }
+    if let Some(v) = new_s.llm_api_key { cur.llm_api_key = Some(v); }
+    if let Some(v) = new_s.llm_model { cur.llm_model = Some(v); }
+    cur.llm_autostart_localhost = new_s.llm_autostart_localhost || cur.llm_autostart_localhost;
+    if let Some(v) = new_s.llm_mode { cur.llm_mode = Some(v); }
+    if let Some(v) = new_s.hf_model_id { cur.hf_model_id = Some(v); }
+    if let Some(v) = new_s.local_model_path { cur.local_model_path = Some(v); }
+    if let Some(v) = new_s.user_dirs { cur.user_dirs = Some(v); }
+    if let Some(v) = new_s.app_sort { cur.app_sort = Some(v); }
+    if let Some(v) = new_s.favorite_order { cur.favorite_order = Some(v); }
+    if let Some(v) = new_s.logging_enabled { cur.logging_enabled = Some(v); }
+    write_settings(&cur);
     // Optional: auto-start LM Studio if localhost specified
-    if new_s.llm_autostart_localhost {
-        if let Some(url) = &new_s.llm_remote_url {
+    if cur.llm_autostart_localhost {
+        if let Some(url) = &cur.llm_remote_url {
             if url.contains("localhost") || url.contains("127.0.0.1") {
                 let _ = try_start_lmstudio();
             }

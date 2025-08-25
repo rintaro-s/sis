@@ -1,5 +1,4 @@
-
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
 import './BottomBar.css';
 
@@ -21,6 +20,8 @@ function BottomBar() {
         ])
         if (!mounted) return
         const w = wins.filter(w=>!!w.title)
+        console.log('Open windows:', w)
+        console.log('Recent apps:', apps)
         setOpenWindows(w)
 
         // 未インデックスのアプリをウィンドウから推定し、最近候補に加える
@@ -40,28 +41,13 @@ function BottomBar() {
           const key = (a.name||'').toLowerCase()
           if (key) knownIconByKey.set(key, a.icon_data_url)
         }
-        // 既知アイコンが無い場合はバックエンドで.desktopに解決を試みる
-        const winsWithIcons = await Promise.all(w.map(async (win)=>{
-          const key = ((win.title||'').split(' - ').pop() || win.wclass || win.title || '').toLowerCase()
-          let icon = knownIconByKey.get(key)
-          if (!icon) {
-            try {
-              const app = await api.resolveWindowApp(win.wclass, win.title)
-              if (app?.icon_data_url) icon = app.icon_data_url
-              // 次回のために履歴へ記録
-              if (app?.exec && app?.name) {
-                await api.recordLaunchGuess(app.exec, app.name, app.icon_data_url)
-              }
-            } catch {}
-          }
-          return { ...win, icon_data_url: icon }
-        }))
-        setOpenWindows(winsWithIcons as any)
-        // Dockではアイコンがあるもの優先、なければ末尾に推定を少数追加
+        // Backend側で解決済みのicon_data_urlをそのまま採用
+  setOpenWindows(w as any)
+  // Dock用 最近: アイコンあり優先で最大5件
   const withIcon = merged.filter(a=>!!a.icon_data_url)
-        const withoutIcon = merged.filter(a=>!a.icon_data_url)
-        const shortlist = [...withIcon.slice(0,5), ...withoutIcon.slice(0,2)]
-        setRecentApps(shortlist)
+  const withoutIcon = merged.filter(a=>!a.icon_data_url)
+  const shortlist = [...withIcon, ...withoutIcon].slice(0, 5)
+  setRecentApps(shortlist)
       } catch {}
     }
     load()
@@ -76,18 +62,23 @@ function BottomBar() {
 
   const focusWin = async (id: string) => { await api.focusWindow(id) }
 
-  // Dock表示: 開いているウィンドウ + 最近5件（重複排除）
-  const openIcons = openWindows.map(w=>({ key:w.id, title:w.title, icon:w.icon_data_url, type:'win' as const }))
-  const recentIcons = recentApps
-    .filter(a=>!openWindows.find(w=> (w.title||'').toLowerCase().includes((a.name||'').toLowerCase())))
-    .map(a=>({ key:a.name, title:a.name, icon:a.icon_data_url, type:'app' as const, app:a }))
-  const dockItems = [...openIcons, ...recentIcons]
+  // Dock表示: 起動中と最近で分割し、重複排除
+  const openIcons = useMemo(() => openWindows.map(w=>({ key:w.id, title:w.title, icon:w.icon_data_url, type:'win' as const })), [openWindows])
+  const recentIcons = useMemo(() => {
+    const dup = new Set<string>()
+    for (const w of openWindows) { const t=(w.title||'').toLowerCase(); if(t) dup.add(t) }
+    return (recentApps||[])
+      .filter(a=>!!a?.name)
+      .filter(a=>!Array.from(dup).some(t=>t.includes((a.name||'').toLowerCase())))
+      .map(a=>({ key:a.name, title:a.name, icon:a.icon_data_url, type:'app' as const, app:a }))
+      .slice(0,5)
+  }, [recentApps, openWindows])
 
   return (
     <div className="futuristic-dock crystal">
-      {/* Dockアイコン（センタリング） */}
+      {/* Dockアイコン（起動中） */}
       <div className="dock-apps">
-        {dockItems.map((item: any, index: number) => (
+        {openIcons.map((item: any, index: number) => (
           <div
             key={item.key}
             className="dock-app"
@@ -110,6 +101,43 @@ function BottomBar() {
             )}
           </div>
         ))}
+      </div>
+
+      {/* セパレーター */}
+      <div className="dock-separator" aria-hidden="true"></div>
+
+      {/* Dockアイコン（最近） */}
+      <div className="dock-apps">
+        {recentIcons.map((item: any, index: number) => (
+          <div
+            key={item.key}
+            className="dock-app"
+            onClick={() => item.type==='win' ? focusWin(item.key) : launchApp(item.app)}
+            onMouseEnter={() => setHoveredApp(item.title)}
+            onMouseLeave={() => setHoveredApp(null)}
+            style={{ animationDelay: `${index * 0.1}s` }}
+          >
+            <div className="app-icon-container">
+              <img 
+                src={item.icon || '/vite.svg'} 
+                alt={item.title}
+                className="app-icon"
+              />
+            </div>
+            {hoveredApp === item.title && (
+              <div className="app-tooltip">
+                {item.title}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* コントロールセンター起動 */}
+      <div className="dock-right">
+        <button className="quick-btn" title="コントロールセンター" onClick={()=>{
+          window.dispatchEvent(new Event('sis:toggle-cc'))
+        }}>⚙️</button>
       </div>
     </div>
   );

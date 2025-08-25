@@ -45,14 +45,17 @@ function App() {
         setCcOpen(false);
       }
     };
-    window.addEventListener('keydown', onKey);
+  window.addEventListener('keydown', onKey);
     const openSettings = () => setSettingsOpen(true);
     window.addEventListener('sis:open-settings', openSettings as any);
+  const toggleCc = () => setCcOpen(p=>!p)
+  window.addEventListener('sis:toggle-cc', toggleCc as any)
 
     return () => {
       unlisten.then((f: () => void) => f());
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('sis:open-settings', openSettings as any);
+  window.removeEventListener('keydown', onKey);
+  window.removeEventListener('sis:open-settings', openSettings as any);
+  window.removeEventListener('sis:toggle-cc', toggleCc as any);
     };
   }, []);
 
@@ -60,11 +63,11 @@ function App() {
     // 初期テーマを適用（設定 or localStorage）
     (async () => {
       try {
-        const saved = await api.getSettings().catch(()=>({theme:'system'} as any));
-        const pref = (saved as any)?.theme || localStorage.getItem('sis-theme') || 'dark';
+  const saved = await api.getSettings().catch(()=>({theme:'system'} as any));
+  const pref = (saved as any)?.theme || localStorage.getItem('sis-theme') || 'dark';
         const apply = pref === 'system' ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : pref;
         document.documentElement.className = apply === 'light' ? 'light-theme' : 'dark-theme';
-        const wp = (saved as any)?.wallpaper;
+  const wp = (saved as any)?.wallpaper;
         if (wp && typeof wp === 'string' && wp.trim()) {
           try {
             const cssVal = await api.cssUrlForPath(wp.trim())

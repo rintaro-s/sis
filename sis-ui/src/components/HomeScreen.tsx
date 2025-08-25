@@ -31,7 +31,19 @@ function HomeScreen() {
           }
           if (inferred.length) merged = [...merged, ...inferred]
         } catch {}
-        if (mounted) setApps(merged);
+        // 重複除去（名前/exec単位、アイコン付きやexecありを優先）
+        const byKey = new Map<string, AppInfo>()
+        const norm = (s?: string) => (s||'').toLowerCase().trim()
+        for (const a of merged) {
+          const key = a.exec ? `exec:${norm(a.exec)}` : `name:${norm(a.name)}`
+          const prev = byKey.get(key)
+          if (!prev) { byKey.set(key, a); continue }
+          const pick = (a.icon_data_url ? 2 : 0) + (a.exec ? 1 : 0)
+          const prevScore = (prev.icon_data_url ? 2 : 0) + (prev.exec ? 1 : 0)
+          if (pick > prevScore) byKey.set(key, a)
+        }
+        const deduped = Array.from(byKey.values())
+        if (mounted) setApps(deduped);
         // お気に入り
         const fav = await api.getFavoriteApps();
         if (mounted) setFavorites(fav);
@@ -117,7 +129,16 @@ function HomeScreen() {
             <div className="card-badge">{apps.length}</div>
           </div>
           <div className="apps-grid">
-            {(apps.filter(a=>a.icon_data_url).length ? apps.filter(a=>a.icon_data_url) : apps)
+            {(() => {
+              const favSet = new Set(favorites.map(f=>f.name))
+              const list = (apps.filter(a=>a.icon_data_url).length ? apps.filter(a=>a.icon_data_url) : apps)
+              const sorted = [...list].sort((a,b)=>{
+                const af = favSet.has(a.name!); const bf = favSet.has(b.name!)
+                if (af!==bf) return af? -1 : 1
+                return (a.name||'').localeCompare(b.name||'')
+              })
+              return sorted
+            })()
               .map((app, index) => (
               <div
                 key={index}

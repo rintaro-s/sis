@@ -16,13 +16,15 @@ function Settings() {
   const [sudoPassword, setSudoPassword] = useState('')
   const [showSudoDialog, setShowSudoDialog] = useState(false)
   const [pendingAction, setPendingAction] = useState<string>('')
+  const [loggingEnabled, setLoggingEnabled] = useState(false)
 
   useEffect(() => { (async()=>{
     try {
       const saved = await api.getSettings().catch(()=>DEFAULT_SETTINGS)
       const merged = { ...DEFAULT_SETTINGS, ...saved }
       try { const xdg = await api.getXdgUserDirs(); merged.user_dirs = { ...merged.user_dirs, ...xdg } } catch {}
-      setSettings(merged); setDraft(JSON.parse(JSON.stringify(merged)))
+  setSettings(merged); setDraft(JSON.parse(JSON.stringify(merged)))
+  setLoggingEnabled(!!merged.logging_enabled)
   // ディレクトリ一覧能力チェックは不要
       
       // システム制御状態を取得
@@ -216,6 +218,22 @@ function Settings() {
               <button className="game-btn danger small" onClick={()=>power('reboot')}>再起動</button>
               <button className="game-btn danger small" onClick={()=>power('shutdown')}>シャットダウン</button>
             </div>
+            <div style={{ marginTop: 12 }}>
+              <label className="setting-label">バックエンドログ</label>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <button className={`game-btn ${loggingEnabled?'primary':'secondary'}`} onClick={async()=>{
+                  const next = !loggingEnabled
+                  setLoggingEnabled(next)
+                  try { await api.setSettings({ ...settings, logging_enabled: next }); } catch {}
+                }}>{loggingEnabled?'有効':'無効'}</button>
+                <span style={{ fontSize: 12, opacity: .8 }}>場所: ~/.local/share/sis-ui/logs/backend.log</span>
+                <button className="game-btn secondary" onClick={async()=>{
+                  const text = await api.getBackendLog(200)
+                  alert(text || '(空)')
+                }}>表示</button>
+                <button className="game-btn secondary" onClick={async()=>{ await api.clearBackendLog() }}>クリア</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -235,21 +253,43 @@ function Settings() {
               <div style={{ display:'flex', gap:8 }}>
                 <input type="text" className="game-input" value={draft.wallpaper||''} onChange={e=>setDraft((p:any)=>({...p, wallpaper:e.target.value}))} placeholder="/path/to/wallpaper.jpg または url(...)" />
                 <button className="game-btn secondary" onClick={async()=>{
-                  const picked = await api.pickImageFile(); if (!picked) return;
+                  const picked = await api.pickImageFile(); 
+                  if (!picked) return;
+                  console.log('Picked wallpaper:', picked)
                   // 保存用には実パス/URL文字列、表示用にはCSS url(...) を使い分ける
                   setDraft((p:any)=>({ ...p, wallpaper: picked }))
                   const cssVal = await api.cssUrlForPath(picked)
+                  console.log('CSS value:', cssVal)
                   document.documentElement.style.setProperty('--desktop-wallpaper', cssVal)
                   // 即時保存して次回起動時も反映
-                  try { await api.setSettings({ ...draft, wallpaper: picked }) } catch {}
+                  try { 
+                    await api.setSettings({ ...draft, wallpaper: picked })
+                    console.log('Wallpaper settings saved')
+                  } catch (e) { 
+                    console.error('Failed to save wallpaper settings:', e)
+                  }
                 }}>画像を選択</button>
                 <button className="game-btn secondary" onClick={async()=>{
                   setDraft((p:any)=>({ ...p, wallpaper: '' }))
                   document.documentElement.style.removeProperty('--desktop-wallpaper')
                   try { await api.setSettings({ ...draft, wallpaper: '' }) } catch {}
                 }}>クリア</button>
+                <button className="game-btn primary" onClick={async()=>{
+                  if (!draft.wallpaper) return
+                  console.log('Applying wallpaper manually:', draft.wallpaper)
+                  try {
+                    const cssVal = await api.cssUrlForPath(draft.wallpaper)
+                    console.log('Manual CSS value:', cssVal)
+                    document.documentElement.style.setProperty('--desktop-wallpaper', cssVal)
+                    await api.setSettings(draft)
+                    console.log('Manual wallpaper applied and saved')
+                  } catch (e) {
+                    console.error('Failed to apply wallpaper:', e)
+                    alert('壁紙の適用に失敗しました: ' + e)
+                  }
+                }}>適用</button>
               </div>
-              <div style={{ fontSize:12, opacity:.7, marginTop:6 }}>注: OS全体の壁紙は変更しません。</div>
+              <div style={{ fontSize:12, opacity:.7, marginTop:6 }}>注: OS全体の壁紙は変更しません。パス入力後は「適用」ボタンを押してください。</div>
             </div>
           </div>
         </div>

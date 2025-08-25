@@ -21,10 +21,12 @@
 .dock-apps {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex: 1;
   justify-content: center;
-  max-width: 800px;
+  overflow-x: auto;
+  padding: 0 20px;
+  scroll-behavior: smooth;
 }
 
 .dock-app {
@@ -319,3 +321,35 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* セパレーターと右端ボタン */
+.dock-separator {
+  width: 1px;
+  height: 36px;
+  background: rgba(255,255,255,0.18);
+  border-right: 1px solid rgba(0,0,0,0.08);
+  border-left: 1px solid rgba(255,255,255,0.08);
+  border-radius: 1px;
+}
+
+.dock-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.quick-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.22);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .2s ease;
+}
+
+.quick-btn:hover { background: rgba(255,255,255,0.18); transform: translateY(-2px); }

@@ -66,7 +66,7 @@ async function safeInvoke<T = unknown>(cmd: string, payload?: Record<string, unk
 }
 
 export const api = {
-  /** CSSのbackground-imageに安全に使えるURLへ変換（ローカルパス→convertFileSrc） */
+  /** CSSのbackground-imageに安全に使えるURLへ変換（ローカルパス→base64 data URL） */
   async cssUrlForPath(input: string): Promise<string> {
     const v = (input || '').trim()
     if (!v) return ''
@@ -74,14 +74,24 @@ export const api = {
     if (/^url\(/i.test(v)) return v
     // http/https はそのまま
     if (/^https?:\/\//i.test(v)) return `url('${v}')`
+    // data: URLもそのまま
+    if (/^data:/i.test(v)) return `url('${v}')`
+    
     try {
-      const core = await import('@tauri-apps/api/core')
-      const url = core.convertFileSrc(v)
-      return `url('${url}')`
+      // ローカルファイルを base64 data URL に変換
+      const result = await safeInvoke<string>('file_to_data_url', { path: v })
+      return `url('${result}')`
     } catch {
-      // フォールバック: file:// スキーム
-      const url = v.startsWith('file://') ? v : `file://${v}`
-      return `url('${url}')`
+      // フォールバック: convertFileSrc（制限があるかも）
+      try {
+        const core = await import('@tauri-apps/api/core')
+        const url = core.convertFileSrc(v)
+        return `url('${url}')`
+      } catch {
+        // 最終フォールバック: file:// スキーム
+        const url = v.startsWith('file://') ? v : `file://${v}`
+        return `url('${url}')`
+      }
     }
   },
   async getSystemInfo(): Promise<SystemInfo> {
@@ -101,20 +111,26 @@ export const api = {
   /** 開いているウィンドウ一覧（wmctrl依存） */
   async getOpenWindows(): Promise<{ id: string; wclass: string; title: string; icon_data_url?: string }[]> {
     try {
-      const text = await safeInvoke<string>('run_safe_command', { cmdline: 'wmctrl -lx 2>/dev/null' })
-      const lines = (text||'').split(/\r?\n/).filter(Boolean)
-      const wins: { id: string; wclass: string; title: string; icon_data_url?: string }[] = []
-      const re = /^(\S+)\s+\S+\s+\S+\s+(\S+)\s+(.*)$/
-      for (const line of lines) {
-        const m = line.match(re)
-        if (!m) continue
-        const [, id, wclass, titleRaw] = m
-        const title = (titleRaw || '').trim()
-        if (!title) continue
-        wins.push({ id, wclass, title })
-      }
-      return wins
-    } catch { return [] }
+      // Prefer backend-side resolution to ensure logging
+      return await safeInvoke<{ id: string; wclass: string; title: string; icon_data_url?: string }[]>('get_open_windows_with_icons')
+    } catch {
+      // Fallback to local parse if backend command missing
+      try {
+        const text = await safeInvoke<string>('run_safe_command', { cmdline: 'wmctrl -lx 2>/dev/null' })
+        const lines = (text||'').split(/\r?\n/).filter(Boolean)
+        const wins: { id: string; wclass: string; title: string; icon_data_url?: string }[] = []
+        const re = /^(\S+)\s+\S+\s+\S+\s+(\S+)\s+(.*)$/
+        for (const line of lines) {
+          const m = line.match(re)
+          if (!m) continue
+          const [, id, wclass, titleRaw] = m
+          const title = (titleRaw || '').trim()
+          if (!title) continue
+          wins.push({ id, wclass, title })
+        }
+        return wins
+      } catch { return [] }
+    }
   },
 
   async focusWindow(id: string): Promise<{ ok: boolean }>{
@@ -216,8 +232,16 @@ export const api = {
     return await safeInvoke<AppInfo>('resolve_window_app', { wclass, title })
   },
 
+  async resolveWindowIcon(id: string, wclass: string, title: string): Promise<AppInfo> {
+    return await safeInvoke<AppInfo>('resolve_window_icon', { window_id: id, wclass, title })
+  },
+
   async recordLaunchGuess(exec: string, name: string, icon_data_url?: string): Promise<{ ok: boolean }> {
     try { await safeInvoke('record_launch_guess', { exec, name, icon_data_url }); return { ok: true } } catch { return { ok: false } }
+  },
+
+  async fileToDataUrl(path: string): Promise<string> {
+    return await safeInvoke<string>('file_to_data_url', { path })
   },
 
   async getLaunchHistory(limit = 20): Promise<AppInfo[]> {
@@ -450,17 +474,23 @@ export const api = {
 
   // 画像ファイル選択（zenity/kdialog→ブラウザinput）
   async pickImageFile(): Promise<string | null> {
+    console.log('Attempting to pick image file...')
     // Try native dialogs via zenity or kdialog
     try {
       const cmd = `sh -lc '(
         zenity --file-selection --title="壁紙を選択" --file-filter="画像 | *.png *.jpg *.jpeg *.gif *.webp *.bmp *.svg" 2>/dev/null || \
         kdialog --getopenfilename "$HOME" "*.png *.jpg *.jpeg *.gif *.webp *.bmp *.svg|画像" 2>/dev/null
       ) | sed -n 1p'`
+      console.log('Running native dialog command...')
       const text = await safeInvoke<string>('run_safe_command', { cmdline: cmd })
       const p = (text || '').split(/\r?\n/)[0]?.trim()
-      if (p) return p
-    } catch { /* ignore */ }
+      console.log('Native dialog result:', p)
+      if (p && p.length > 0) return p
+    } catch (e) { 
+      console.log('Native dialog failed:', e)
+    }
 
+    console.log('Falling back to browser file picker...')
     // Browser fallback: <input type="file">
     return await new Promise<string | null>((resolve) => {
       const input = document.createElement('input')
@@ -469,9 +499,16 @@ export const api = {
       input.onchange = () => {
         const file = input.files?.[0]
         if (!file) return resolve(null)
-        const url = URL.createObjectURL(file)
-        resolve(url)
+        const reader = new FileReader()
+        reader.onload = () => {
+          const result = reader.result as string
+          console.log('Browser picker data URL result:', result?.slice(0,64) + '...')
+          resolve(result)
+        }
+        reader.onerror = () => resolve(null)
+        reader.readAsDataURL(file)
       }
+      input.oncancel = () => resolve(null)
       input.click()
     })
   },
