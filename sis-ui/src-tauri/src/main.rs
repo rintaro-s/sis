@@ -454,6 +454,131 @@ fn scan_appimages(dirs: &[PathBuf]) -> Vec<AppInfo> {
     out
 }
 
+fn build_app_dirs() -> Vec<PathBuf> {
+    let mut app_dirs: Vec<PathBuf> = vec![
+        PathBuf::from("/usr/share/applications"),
+        PathBuf::from("/usr/local/share/applications"),
+    ];
+    if let Ok(xdg_home) = std::env::var("XDG_DATA_HOME") {
+        app_dirs.push(PathBuf::from(xdg_home).join("applications"));
+    } else if let Some(home) = dirs::home_dir() {
+        app_dirs.push(home.join(".local/share/applications"));
+    }
+    if let Ok(xdg_dirs) = std::env::var("XDG_DATA_DIRS") {
+        for d in xdg_dirs.split(':') { if !d.is_empty() { app_dirs.push(PathBuf::from(d).join("applications")); }}
+    } else {
+        app_dirs.push(PathBuf::from("/usr/local/share/applications"));
+        app_dirs.push(PathBuf::from("/usr/share/applications"));
+    }
+    if let Some(home) = dirs::home_dir() {
+        app_dirs.push(home.join(".local/share/flatpak/exports/share/applications"));
+        app_dirs.push(home.join(".local/share/applications/wine"));
+        app_dirs.push(home.join(".local/share/applications/steam"));
+    }
+    app_dirs.push(PathBuf::from("/var/lib/flatpak/exports/share/applications"));
+    app_dirs.push(PathBuf::from("/var/lib/snapd/desktop/applications"));
+    app_dirs
+}
+
+fn parse_desktop_fields(content: &str) -> (String, String, String, String) {
+    // returns (name, exec, icon_raw, startup_wmclass)
+    let name = parse_localized_name(content);
+    let mut exec = content.lines()
+        .find(|line| line.starts_with("Exec="))
+        .and_then(|line| line.strip_prefix("Exec=")).unwrap_or("").to_string();
+    for code in ["%U","%u","%F","%f","%i","%c","%k"].iter() { exec = exec.replace(code, ""); }
+    let icon_raw = content.lines().find(|l| l.starts_with("Icon=")).and_then(|l| l.splitn(2,'=').nth(1)).unwrap_or("").trim().to_string();
+    let swm = content.lines().find(|l| l.starts_with("StartupWMClass=")).and_then(|l| l.splitn(2,'=').nth(1)).unwrap_or("").trim().to_string();
+    (name, exec, icon_raw, swm)
+}
+
+fn desktop_hidden_or_settings(content: &str) -> bool {
+    let hidden = content.lines().any(|l| l.trim() == "Hidden=true") || content.lines().any(|l| l.trim() == "NoDisplay=true");
+    if hidden { return true; }
+    if content.lines().any(|l| l.starts_with("X-GNOME-Settings-Panel")) { return true; }
+    if content.lines().any(|l| l.starts_with("Exec=gnome-control-center")) { return true; }
+    if content.lines().any(|l| l.starts_with("Exec=xfce4-settings-manager")) && content.contains("--dialog") { return true; }
+    false
+}
+
+fn normalize_wclass(wc: &str) -> (String, String, String) {
+    let lower = wc.to_lowercase();
+    let parts = lower.split('.');
+    let first = parts.clone().next().unwrap_or("").to_string();
+    let last = parts.last().unwrap_or("").to_string();
+    (lower, first, last)
+}
+
+fn validate_exec(exec: &str) -> bool {
+    let mut tokens = exec.split_whitespace();
+    let mut first = tokens.next().unwrap_or("");
+    if first == "env" { first = tokens.next().unwrap_or(first); }
+    let base = std::path::Path::new(first).file_name().and_then(|s| s.to_str()).unwrap_or(first);
+    if base.is_empty() { return false; }
+    which(base) || (Path::new(first).is_absolute() && Path::new(first).exists())
+}
+
+fn match_desktop_to_window(wclass: &str, title: &str) -> Option<AppInfo> {
+    let (wcl, wcf, wclast) = normalize_wclass(wclass);
+    let title_l = title.to_lowercase();
+    let app_dirs = build_app_dirs();
+    let mut fallback: Option<AppInfo> = None;
+    for path in app_dirs.iter() {
+        if path.exists() && path.is_dir() {
+            if let Ok(read) = fs::read_dir(path) {
+                for entry in read.flatten() {
+                    let p = entry.path();
+                    if p.is_file() && p.extension().map_or(false, |e| e=="desktop") {
+                        if let Ok(content) = fs::read_to_string(&p) {
+                            if desktop_hidden_or_settings(&content) { continue; }
+                            let (name, exec, icon_raw, swm) = parse_desktop_fields(&content);
+                            if name.is_empty() || exec.is_empty() || !validate_exec(&exec) { continue; }
+                            let swm_l = swm.to_lowercase();
+                            if !swm_l.is_empty() {
+                                if swm_l == wcl || swm_l == wcf || swm_l == wclast { // strong match (全体/先頭/末尾)
+                                    let icon_path = resolve_icon_path(&icon_raw);
+                                    let icon_data_url = icon_path.as_ref().and_then(|p| to_data_url(p));
+                                    return Some(AppInfo { name, exec, icon_data_url });
+                                }
+                            }
+                            // weaker: title contains app name
+                            let name_l = name.to_lowercase();
+                            if !name_l.is_empty() && (title_l.contains(&name_l) || name_l.contains(&title_l)) {
+                                let icon_path = resolve_icon_path(&icon_raw);
+                                let icon_data_url = icon_path.as_ref().and_then(|p| to_data_url(p));
+                                let app = AppInfo { name: name.clone(), exec: exec.clone(), icon_data_url: icon_data_url.clone() };
+                                if fallback.is_none() { fallback = Some(app); }
+                            }
+                            // weaker2: Execのベース名がWM_CLASSの成分に一致
+                            let exec_base = exec.split_whitespace().next().unwrap_or("");
+                            let exec_bn = std::path::Path::new(exec_base).file_name().and_then(|s| s.to_str()).unwrap_or(exec_base).to_lowercase();
+                            if !exec_bn.is_empty() && (exec_bn == wcf || exec_bn == wclast) {
+                                let icon_path = resolve_icon_path(&icon_raw);
+                                let icon_data_url = icon_path.as_ref().and_then(|p| to_data_url(p));
+                                let app = AppInfo { name: name.clone(), exec: exec.clone(), icon_data_url };
+                                if fallback.is_none() { fallback = Some(app); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fallback
+}
+
+#[tauri::command]
+fn resolve_window_app(wclass: String, title: String) -> Result<AppInfo, String> {
+    match match_desktop_to_window(&wclass, &title) { Some(app) => Ok(app), None => Err("not-found".into()) }
+}
+
+#[tauri::command]
+fn record_launch_guess(exec: String, name: String, icon_data_url: Option<String>) -> Result<String, String> {
+    if exec.trim().is_empty() || name.trim().is_empty() { return Err("invalid-args".into()); }
+    record_launch_from_exec(&exec, Some(&name), icon_data_url);
+    Ok("recorded".into())
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 struct FolderCounts { pictures: u64, documents: u64, videos: u64, downloads: u64, music: u64, others: u64 }
 
@@ -666,7 +791,7 @@ fn main() {
     tauri::Builder::default()
         .manage(system)
         .manage(network_stats)
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+    .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             // get window (webview) in a Tauri-compatible way
             // Prefer get_webview_window (returns Option<Window>), fallback to AppHandle.get_window if present
@@ -676,11 +801,11 @@ fn main() {
             });
             let _window = window.expect("main window not found");
 
-            // Tauri v2 global shortcut registration API takes only the shortcut string
-            let gs = app.handle().global_shortcut();
-            if let Err(e) = gs.register("Super") {
-                println!("warning: failed to register global shortcut: {:?}", e);
-            }
+            // NOTE: Avoid registering bare "Super" key; many WMs reserve it and the plugin (muda) may not recognize it.
+            // If you want a global toggle, use a combo like "CommandOrControl+Shift+P" and expose a settings toggle.
+            // Example (disabled):
+            // let gs = app.handle().global_shortcut();
+            // let _ = gs.register("CommandOrControl+Shift+P");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -707,6 +832,8 @@ fn main() {
             next_track,
             previous_track,
             launch_app,
+            resolve_window_app,
+            record_launch_guess,
             overlay_start,
             overlay_stop,
             overlay_status,
@@ -911,7 +1038,7 @@ fn run_safe_command(cmdline: String) -> Result<String, String> {
     let allow = [
         "xdg-open","ls","cp","mv","mkdir","tar","zip","unzip",
         "playerctl","pactl","brightnessctl","nmcli","rfkill","gnome-screenshot",
-        "kdeconnect-cli","clamscan","echo"
+        "kdeconnect-cli","clamscan","echo","wmctrl","zenity","kdialog","base64"
     ];
     if !allow.contains(&base) { return Err(format!("command-not-allowed: {}", base)); }
     if trimmed.contains(" rm ") || trimmed.starts_with("rm ") || trimmed.contains(" sudo ") {

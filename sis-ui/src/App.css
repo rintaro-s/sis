@@ -1,29 +1,174 @@
-#root {
-  max-width: 100vw;
-  margin: 0;
-  padding: 0;
-  text-align: center;
+:root {
+  --bg-primary: #1a1d24;
+  --bg-secondary: #242831;
+  --bg-elevated: #2e333d;
+  --bg-glass: rgba(36, 40, 49, 0.7);
+  --text-primary: #e1e3e6;
+  --text-secondary: #9ea3ab;
+  --border-soft: rgba(255, 255, 255, 0.1);
+  --accent-primary: #0091ff;
+  --accent-secondary: #ff3d8b;
+  --panel-blur: 12px;
+  --shadow-scale: 1;
+  
+  /* 未来的テーマ変数 */
+  --app-bg: linear-gradient(135deg, #0a0f1c 0%, #1a1f2e 40%, #0f1419 100%);
+  --panel-bg: rgba(255, 255, 255, 0.05);
+  --panel-border: rgba(255, 255, 255, 0.1);
+  --accent-blue: #0096ff;
+  --accent-cyan: #00d4ff;
 }
 
-.app {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
+/* ライトテーマ */
+.light-theme {
+  --bg-primary: #f0f2f5;
+  --bg-secondary: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-glass: rgba(255, 255, 255, 0.8);
+  --text-primary: #1c1e21;
+  --text-secondary: #606770;
+  --border-soft: rgba(0, 0, 0, 0.1);
+  --accent-primary: #0066cc;
+  --accent-secondary: #cc0066;
+  
+  --app-bg: radial-gradient(circle at 15% 20%, rgba(173, 216, 230, 0.45) 0%, transparent 30%),
+             radial-gradient(circle at 85% 80%, rgba(135, 206, 250, 0.35) 0%, transparent 35%),
+             linear-gradient(135deg, #f8fbff 0%, #e8f3fb 40%, #f3f9ff 100%);
+  --panel-bg: rgba(255, 255, 255, 0.8);
+  --panel-border: rgba(0, 0, 0, 0.1);
+  --accent-blue: #0066cc;
+  --accent-cyan: #0099dd;
+  --topbar-bg: linear-gradient(135deg,
+                rgba(180, 220, 255, 0.95) 0%,
+                rgba(160, 210, 250, 0.90) 50%,
+                rgba(150, 200, 245, 0.95) 100%);
+  --bottombar-bg: linear-gradient(45deg,
+                 rgba(200, 230, 255, 0.95) 0%,
+                 rgba(185, 222, 252, 0.92) 50%,
+                 rgba(170, 215, 250, 0.95) 100%);
+  --sidebar-bg: linear-gradient(180deg,
+                 rgba(220, 240, 255, 0.95) 0%,
+                 rgba(205, 235, 255, 0.90) 50%,
+                 rgba(195, 230, 252, 0.95) 100%);
 }
-/* Backend error banner */
+
+/* ダークテーマ */
+.dark-theme {
+  --bg-primary: #1a1d24;
+  --bg-secondary: #242831;
+  --bg-elevated: #2e333d;
+  --bg-glass: rgba(36, 40, 49, 0.7);
+  --text-primary: #e1e3e6;
+  --text-secondary: #9ea3ab;
+  --border-soft: rgba(255, 255, 255, 0.1);
+  --accent-primary: #0091ff;
+  --accent-secondary: #ff3d8b;
+  
+  --app-bg: linear-gradient(135deg, #0a0f1c 0%, #1a1f2e 40%, #0f1419 100%);
+  --panel-bg: rgba(255, 255, 255, 0.05);
+  --panel-border: rgba(255, 255, 255, 0.1);
+  --accent-blue: #0096ff;
+  --accent-cyan: #00d4ff;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+.app-container {
+  display: grid;
+  grid-template-areas:
+    "header header"
+    "sidebar main"
+    "footer footer";
+  grid-template-rows: auto 1fr auto;
+  grid-template-columns: auto 1fr;
+  height: 100vh;
+  width: 100vw;
+  transition: grid-template-columns 0.3s ease;
+}
+
+.app-container.sidebar-collapsed {
+  grid-template-columns: 60px 1fr;
+}
+
+.main-content {
+  grid-area: main;
+  overflow-y: auto;
+  padding: 12px 16px;
+  /* 壁紙が設定されていれば --desktop-wallpaper を使い、なければテーマの背景グラデーション */
+  background-image: var(--desktop-wallpaper, var(--app-bg));
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
 .error-banner {
   position: fixed;
-  top: 56px;
-  left: 0; right: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  background-color: #d32f2f;
+  color: white;
+  padding: 10px;
+  text-align: center;
   z-index: 2000;
-  margin: 0 auto;
-  max-width: 960px;
-  padding: 10px 14px;
-  border-radius: var(--border-radius-medium);
-  border: 1px solid rgba(255, 124, 124, 0.35);
-  background: rgba(255, 240, 240, 0.85);
-  color: #7f1d1d;
-  font-size: 0.9em;
-  box-shadow: var(--shadow-soft);
+  font-size: 14px;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
   backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-content {
+  position: relative;
+  width: min(1200px, 95vw);
+  max-height: 95vh;
+  overflow: auto;
+  background: var(--bg-elevated);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  border: 1px solid var(--border-soft);
+  color: var(--text-primary);
+}
+
+.modal-close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-soft);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  color: var(--text-primary);
+  font-size: 16px;
+  transition: all 0.2s ease;
+}
+
+.modal-close-btn:hover {
+  transform: scale(1.1);
+  background: var(--accent-secondary);
+  color: white;
+  border-color: transparent;
 }

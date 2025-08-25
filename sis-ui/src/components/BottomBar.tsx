@@ -4,169 +4,113 @@ import { api } from '../services/api';
 import './BottomBar.css';
 
 function BottomBar() {
-  const [input, setInput] = useState('');
-  const [output, setOutput] = useState<string>('');
-  const [busy, setBusy] = useState(false);
-  const [sudoPrompt, setSudoPrompt] = useState<{cmd: string} | null>(null);
-  const [sudoPassword, setSudoPassword] = useState('');
-  const [settings, setSettings] = useState<any | null>(null)
-  // logs moved to Settings
+  const [openWindows, setOpenWindows] = useState<{ id: string; wclass: string; title: string; icon_data_url?: string }[]>([]);
+  const [recentApps, setRecentApps] = useState<any[]>([]);
+  const [hoveredApp, setHoveredApp] = useState<string | null>(null);
 
-  useEffect(() => { api.getSettings().then(setSettings) }, [])
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const [wins, apps] = await Promise.all([
+          api.getOpenWindows().catch(()=>[]),
+          api.getRecentApps().catch(async()=>{
+            // フォールバック: listApplicationsから先頭数件
+            try { const la = await api.listApplications(); return la.slice(0,5) } catch { return [] }
+          })
+        ])
+        if (!mounted) return
+        const w = wins.filter(w=>!!w.title)
+        setOpenWindows(w)
 
-  function extractBashCommandBlocks(text: string): { cmd: string; needsSudo: boolean }[] {
-    const blocks: { cmd: string; needsSudo: boolean }[] = []
-    const fenceRe = /```[a-zA-Z]*\n([\s\S]*?)```/g
-    const singleFenceRe = /'''\n([\s\S]*?)'''/g
-    let m: RegExpExecArray | null
-    while ((m = fenceRe.exec(text)) !== null) {
-      const body = m[1].trim()
-      const isShebang = body.startsWith('#!/usr/bin/env bash') || body.startsWith('#!/bin/bash')
-      const needsSudo = /^\s*sudo\s+/m.test(body)
-      if (isShebang || /```(bash|sh|zsh)/.test(m[0])) {
-        // take non-empty lines excluding comments; join with '; '
-        const lines = body.split(/\r?\n/).filter(l => l.trim() && !l.trim().startsWith('#'))
-        const cmd = lines.join('; ')
-        if (cmd) blocks.push({ cmd, needsSudo })
-      }
-    }
-    while ((m = singleFenceRe.exec(text)) !== null) {
-      const body = m[1].trim()
-      const isShebang = body.startsWith('#!/usr/bin/env bash') || body.startsWith('#!/bin/bash')
-      const needsSudo = /^\s*sudo\s+/m.test(body)
-      if (isShebang || true) {
-        const lines = body.split(/\r?\n/).filter(l => l.trim() && !l.trim().startsWith('#'))
-        const cmd = lines.join('; ')
-        if (cmd) blocks.push({ cmd, needsSudo })
-      }
-    }
-    // Fallback: detect shebang block without fences
-    const she = /(^|\n)#!\/(usr\/bin\/env bash|bin\/bash)[\s\S]*/m.exec(text)
-    if (she) {
-      const body = text.slice(she.index).trim()
-      const lines = body.split(/\r?\n/).filter(l => l.trim() && !l.trim().startsWith('#'))
-      const cmd = lines.join('; ')
-      if (cmd) blocks.push({ cmd, needsSudo: /^\s*sudo\s+/m.test(body) })
-    }
-    return blocks
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const q = input.trim();
-    if (!q || busy) return;
-    setBusy(true);
-    setOutput('');
-    try {
-      if (q.startsWith('!')) {
-        const cmd = q.slice(1).trim();
-  if (cmd.startsWith('sudo ')) {
-          // show password prompt
-          setSudoPrompt({ cmd });
-        } else {
-          const res = await api.runSafeCommand(cmd);
-          setOutput(res.text || res.message || '');
+        // 未インデックスのアプリをウィンドウから推定し、最近候補に加える
+        const appByName = new Map<string, any>()
+        for (const a of apps || []) { if (a?.name) appByName.set((a.name||'').toLowerCase(), a) }
+        const inferred: any[] = []
+        for (const win of w) {
+          const guessRaw = (win.title || '').split(' - ').pop() || win.wclass || win.title
+          const guess = (guessRaw||'').toLowerCase()
+          if (!guess) continue
+          if (!appByName.has(guess)) inferred.push({ name: guessRaw, exec: undefined, icon_data_url: undefined })
         }
-      } else {
-        const guide = "次の指示をbashコマンドに変換して、必ず```bash\n#!/usr/bin/env bash\n...\n``` もしくは ''' で囲まれたブロックで返してください。説明文は不要。";
-        let text = ''
-        const prompt = `${guide}\n\n${q}`
-        if (settings?.llm_mode === 'lmstudio') {
-          const url = settings?.llm_remote_url || 'http://localhost:1234/v1/chat/completions'
-          if (settings?.llm_autostart_localhost && /localhost|127\.0\.0\.1/.test(url)) {
-            await api.tryStartLmStudio()
+        // 開いているウィンドウに対して既知アプリのアイコンを紐づける
+        const merged = [...(apps||[]), ...inferred]
+        const knownIconByKey = new Map<string, string | undefined>()
+        for (const a of apps || []) {
+          const key = (a.name||'').toLowerCase()
+          if (key) knownIconByKey.set(key, a.icon_data_url)
+        }
+        // 既知アイコンが無い場合はバックエンドで.desktopに解決を試みる
+        const winsWithIcons = await Promise.all(w.map(async (win)=>{
+          const key = ((win.title||'').split(' - ').pop() || win.wclass || win.title || '').toLowerCase()
+          let icon = knownIconByKey.get(key)
+          if (!icon) {
+            try {
+              const app = await api.resolveWindowApp(win.wclass, win.title)
+              if (app?.icon_data_url) icon = app.icon_data_url
+              // 次回のために履歴へ記録
+              if (app?.exec && app?.name) {
+                await api.recordLaunchGuess(app.exec, app.name, app.icon_data_url)
+              }
+            } catch {}
           }
-          const res = await api.llmQueryRemote(url, prompt, settings?.llm_api_key || undefined, settings?.llm_model || undefined)
-          text = res.text || res.message || ''
-        } else {
-          const res = await api.llmQuery(prompt)
-          text = res.text || res.message || ''
-        }
-        setOutput(text);
-        // Try to auto-extract bash commands and run them
-        const blocks = extractBashCommandBlocks(text)
-        if (blocks.length) {
-          const first = blocks[0]
-          if (first.needsSudo) {
-            setSudoPrompt({ cmd: first.cmd })
-          } else {
-            const run = await api.runSafeCommand(first.cmd)
-            setOutput((prev) => prev + '\n\n$ ' + first.cmd + '\n' + (run.text || run.message || ''))
-          }
-        }
-      }
-    } catch (err) {
-      setOutput((err as Error).message);
-    } finally {
-      setBusy(false);
-      // do not clear input if waiting for sudo password
-      if (!sudoPrompt) setInput('');
+          return { ...win, icon_data_url: icon }
+        }))
+        setOpenWindows(winsWithIcons as any)
+        // Dockではアイコンがあるもの優先、なければ末尾に推定を少数追加
+  const withIcon = merged.filter(a=>!!a.icon_data_url)
+        const withoutIcon = merged.filter(a=>!a.icon_data_url)
+        const shortlist = [...withIcon.slice(0,5), ...withoutIcon.slice(0,2)]
+        setRecentApps(shortlist)
+      } catch {}
     }
+    load()
+    const iv = setInterval(load, 3000)
+    return ()=>{ mounted = false; clearInterval(iv) }
+  }, []);
+
+  const launchApp = async (app: any) => {
+    if (!app) return
+    if (app.exec) await api.launchApp(app.exec)
   };
 
-  const submitSudo = async () => {
-    if (!sudoPrompt) return;
-    setBusy(true);
-    try {
-      const res = await api.runWithSudo(sudoPrompt.cmd, sudoPassword);
-      setOutput(res.text || res.message || '');
-    } catch (e) {
-      setOutput((e as Error).message);
-    } finally {
-      setBusy(false);
-      setSudoPrompt(null);
-      setSudoPassword('');
-      setInput('');
-    }
-  };
+  const focusWin = async (id: string) => { await api.focusWindow(id) }
+
+  // Dock表示: 開いているウィンドウ + 最近5件（重複排除）
+  const openIcons = openWindows.map(w=>({ key:w.id, title:w.title, icon:w.icon_data_url, type:'win' as const }))
+  const recentIcons = recentApps
+    .filter(a=>!openWindows.find(w=> (w.title||'').toLowerCase().includes((a.name||'').toLowerCase())))
+    .map(a=>({ key:a.name, title:a.name, icon:a.icon_data_url, type:'app' as const, app:a }))
+  const dockItems = [...openIcons, ...recentIcons]
 
   return (
-    <div className="bottom-bar">
-      <form onSubmit={handleSubmit} className="command-prompt">
-        <span className="prompt-prefix">SIS$</span>
-        <input
-          type="text"
-          className="chat-input"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Alt+Space ランチャー / Ctrl+Alt+Z HUD / Ctrl+P パレット（先頭@でAI）"
-        />
-        <span className="cursor-blink"></span>
-      </form>
-      
-      <div className="action-buttons">
-        <div className="status-indicator">
-          <div className="status-dot"></div>
-          <span className="status-text">{busy ? 'BUSY' : 'ONLINE'}</span>
-        </div>
-  {/* logs moved to Settings */}
-        <button type="button" title="Push-To-Talk (長押しで録音)" className="send-button" onMouseDown={() => console.log('PTT start')} onMouseUp={() => console.log('PTT stop')}>
-          🎤
-        </button>
-        
-        <button 
-          type="submit" 
-          className="send-button"
-          onClick={handleSubmit}
-          disabled={!input.trim() || busy}
-        >
-          ▶
-        </button>
+    <div className="futuristic-dock crystal">
+      {/* Dockアイコン（センタリング） */}
+      <div className="dock-apps">
+        {dockItems.map((item: any, index: number) => (
+          <div
+            key={item.key}
+            className="dock-app"
+            onClick={() => item.type==='win' ? focusWin(item.key) : launchApp(item.app)}
+            onMouseEnter={() => setHoveredApp(item.title)}
+            onMouseLeave={() => setHoveredApp(null)}
+            style={{ animationDelay: `${index * 0.1}s` }}
+          >
+            <div className="app-icon-container">
+              <img 
+                src={item.icon || '/vite.svg'} 
+                alt={item.title}
+                className="app-icon"
+              />
+            </div>
+            {hoveredApp === item.title && (
+              <div className="app-tooltip">
+                {item.title}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
-      {output && (
-        <div style={{ position: 'absolute', left: 16, right: 16, bottom: 56, color: '#cfe6ff', fontSize: 12, opacity: 0.9 }}>
-          <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{output}</pre>
-        </div>
-      )}
-      {sudoPrompt && (
-        <div style={{ position: 'absolute', left: 16, right: 16, bottom: 110, color: '#ffd9d9', fontSize: 13 }}>
-          <div>sudo コマンドを実行するにはパスワードを入力してください:</div>
-          <input type="password" value={sudoPassword} onChange={(e) => setSudoPassword(e.target.value)} style={{ width: '60%', marginRight: 8 }} />
-          <button onClick={submitSudo} disabled={busy || !sudoPassword}>送信</button>
-          <button onClick={() => { setSudoPrompt(null); setSudoPassword(''); }}>キャンセル</button>
-        </div>
-      )}
-  {/* logs overlay removed from footer */}
     </div>
   );
 }

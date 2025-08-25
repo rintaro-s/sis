@@ -22,6 +22,20 @@ function AppStore() {
         setApps(list.filter((a) => a.exec && a.exec.trim() !== ''))
       })
       .catch((e) => setError(e?.message || 'アプリ一覧を取得できません'))
+  // Snap アプリもマージ
+  api.scanSnapApps()
+    .then((snap) => {
+      if (!mounted) return
+      setApps((prev) => {
+        const map = new Map<string, AppInfo>()
+        for (const a of [...prev, ...snap]) {
+          const key = `${a.name}::${a.exec || ''}`
+          if (!map.has(key)) map.set(key, a)
+        }
+        return Array.from(map.values())
+      })
+    })
+    .catch(() => {})
   api.getFavoriteApps().then(setFav).catch(()=>setFav([]))
   api.getSettings().then((s)=>{ setSettings(s); if (s?.app_sort) setSort(s.app_sort) })
     return () => { mounted = false }

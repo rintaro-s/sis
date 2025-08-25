@@ -1,78 +1,187 @@
-
-import FileManager from './FileManager';
-import AppStore from './AppStore';
 import { useEffect, useState } from 'react';
 import { api, type AppInfo } from '../services/api';
 import './HomeScreen.css';
-import './HomeScreen.css';
 
 function HomeScreen() {
-  const [tab, setTab] = useState<'all'|'recent'>('all')
-  const [recent, setRecent] = useState<AppInfo[]>([])
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [drawerTab, setDrawerTab] = useState<'desktop'|'documents'>('desktop')
-  const [desktopItems, setDesktopItems] = useState<{name:string; path:string; is_dir:boolean}[]>([])
-  const [docItems, setDocItems] = useState<{name:string; path:string; is_dir:boolean}[]>([])
-  useEffect(()=>{ api.getLaunchHistory(24).then(setRecent).catch(()=>{}) },[])
-  useEffect(()=>{ if (drawerOpen) {
-    if (drawerTab==='desktop') api.listDesktopItems().then(setDesktopItems).catch(()=>{})
-    if (drawerTab==='documents') api.listDocumentsItems().then(setDocItems).catch(()=>{})
-  } }, [drawerOpen, drawerTab])
+  const [apps, setApps] = useState<AppInfo[]>([]);
+  const [favorites, setFavorites] = useState<AppInfo[]>([]);
+  const [desktopFiles, setDesktopFiles] = useState<{ name: string; path: string; is_dir?: boolean }[]>([]);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    let mounted = true;
+    const tick = setInterval(()=>{ if(mounted) setCurrentTime(new Date()) }, 1000)
+    
+    const loadData = async () => {
+      try {
+        // アプリ一覧
+        const list = await api.listApplications();
+        // 現在開いているウィンドウから未インデックスを推定
+        let merged = list
+        try {
+          const wins = await api.getOpenWindows()
+          const names = new Set(merged.map(a=>a.name))
+          const inferred: AppInfo[] = []
+          for (const w of wins) {
+            const guess = (w.title || '').split(' - ').pop() || w.wclass || w.title
+            if (guess && !names.has(guess)) {
+              inferred.push({ name: guess })
+              names.add(guess)
+            }
+          }
+          if (inferred.length) merged = [...merged, ...inferred]
+        } catch {}
+        if (mounted) setApps(merged);
+        // お気に入り
+        const fav = await api.getFavoriteApps();
+        if (mounted) setFavorites(fav);
+
+        // デスクトップ表示（バックエンドに委譲）
+        try {
+          const items = await api.listDesktopItems().catch(()=>[])
+          if (mounted) setDesktopFiles(items.map(i=>({ name: i.name, path: i.path, is_dir: i.is_dir })))
+        } catch {}
+      } catch (error) {
+        console.error('データの読み込みに失敗:', error);
+      }
+    };
+
+    loadData();
+    const interval = setInterval(loadData, 8000);
+    
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+      clearInterval(tick)
+    };
+  }, []);
+
+  const openFile = (path: string) => { api.openPath(path) };
+
+  const launchApp = (exec: string) => { api.launchApp(exec) };
+
+  const isFav = (a: AppInfo) => favorites.some(f=>f.name===a.name)
+  const togglePin = async (a: AppInfo)=>{
+    if (isFav(a)) { await api.removeFavoriteApp(a.name!) } else { await api.addFavoriteApp(a) }
+  const fav = await api.getFavoriteApps(); setFavorites(fav)
+  // サイドバーへ更新通知
+  window.dispatchEvent(new Event('sis:favorites-updated'))
+  }
+
+  // 設定はSidebarのクイックアクションに移動
+
   return (
-    <div className="home-screen">
-      <div className="dashboard-grid two-columns">
-        <div className="panel left" style={{ position: 'relative' }}>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-            <h3 style={{ margin: 0 }}>ファイル管理</h3>
-            <button onClick={()=>setDrawerOpen(v=>!v)}>{drawerOpen?'デスクトップを隠す':'デスクトップを表示'}</button>
-          </div>
-          {drawerOpen && (
-            <div style={{ position:'absolute', top:36, right:-8, width: 560, maxHeight: 520, overflow:'auto', background:'var(--bg-panel)', border:'1px solid rgba(0,0,0,.08)', borderRadius: 14, boxShadow:'var(--shadow-depth)', padding: 14 }}>
-              <div style={{ display:'flex', gap:8, margin:'2px 4px 10px' }}>
-                <button style={{ padding:'6px 10px', borderRadius:10, border:'1px solid rgba(167,199,231,.35)', background: drawerTab==='desktop'?'#2f63bd':'#e7efff', color: drawerTab==='desktop'?'#fff':'#102542' }} onClick={()=>setDrawerTab('desktop')}>デスクトップ</button>
-                <button style={{ padding:'6px 10px', borderRadius:10, border:'1px solid rgba(167,199,231,.35)', background: drawerTab==='documents'?'#2f63bd':'#e7efff', color: drawerTab==='documents'?'#fff':'#102542' }} onClick={()=>setDrawerTab('documents')}>ドキュメント</button>
-              </div>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:10 }}>
-                {(drawerTab==='desktop'? desktopItems: docItems).map((it, i)=> (
-          <div key={i} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 12px', borderRadius:12, cursor:'pointer', background:'var(--bg-glass)', border:'1px solid rgba(167,199,231,.2)' }}
-                       onClick={()=> api.launchApp(`xdg-open "${it.path}"`)}
-                       onContextMenu={(e)=>{ e.preventDefault(); if(drawerTab==='desktop' && !it.is_dir) api.setWallpaper(it.path) }}
-                  >
-                    <span style={{ opacity:.8, fontSize:18 }}>{it.is_dir?'📁':'📄'}</span>
-                    <span style={{ whiteSpace:'nowrap', textOverflow:'ellipsis', overflow:'hidden' }}>{it.name}</span>
-                  </div>
-                ))}
-              </div>
+    <div className="futuristic-home">
+  {/* 壁紙はApp側で一元適用 */}
+      
+      {/* ウェルカムセクション */}
+      <div className="welcome-section">
+        <div className="welcome-card">
+          <div className="welcome-content">
+            <h1 className="welcome-title">
+              <span className="title-main">おかえりなさい</span>
+              <span className="title-sub">Smart Interface System</span>
+            </h1>
+            <div className="welcome-time">
+              {currentTime.toLocaleDateString('ja-JP', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                weekday: 'long'
+              })} - {currentTime.toLocaleTimeString('ja-JP', {
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
             </div>
-          )}
-      <div style={{ marginTop: drawerOpen? 520 : 8 }}>
-            <FileManager />
+          </div>
+          <div className="welcome-visual">
+            <div className="hologram-circle"></div>
+            <div className="data-streams">
+              <div className="stream"></div>
+              <div className="stream"></div>
+              <div className="stream"></div>
+            </div>
           </div>
         </div>
-        <div className="panel right">
-          <div className="apps-header">
-            <h3>アプリ</h3>
-            <div className="tabs">
-              <button className={tab==='all'?'active':''} onClick={()=>setTab('all')}>すべて</button>
-              <button className={tab==='recent'?'active':''} onClick={()=>setTab('recent')}>最近</button>
-            </div>
+      </div>
+
+      {/* メインダッシュボード */}
+      <div className="dashboard-grid">
+        {/* アプリ一覧 */}
+        <div className="dashboard-card apps-card">
+          <div className="card-header">
+            <h3 className="card-title">
+              <span className="card-icon">APP</span>
+              アプリケーション一覧
+            </h3>
+            <div className="card-badge">{apps.length}</div>
           </div>
-          {tab==='all' ? <AppStore /> : (
-            <div style={{padding:'8px 0'}}>
-              <div className="app-grid">
-                {(recent||[]).map((app: any, idx: number)=>(
-                  <div key={idx} className="app-card" onClick={()=> app.exec && api.launchApp(app.exec)}>
-                    <img src={app.icon_data_url || '/src/assets/icons/icon_app_default.svg'} alt={app.name} />
-                    <span>{app.name}</span>
-                  </div>
-                ))}
+          <div className="apps-grid">
+            {(apps.filter(a=>a.icon_data_url).length ? apps.filter(a=>a.icon_data_url) : apps)
+              .map((app, index) => (
+              <div
+                key={index}
+                className="app-item"
+                onClick={() => app.exec && launchApp(app.exec)}
+                onContextMenu={(e)=>{ e.preventDefault(); togglePin(app) }}
+                style={{ animationDelay: `${index * 0.1}s` }}
+              >
+                <div className="app-icon-wrapper">
+                  {app.icon_data_url ? (
+                    <img 
+                      src={app.icon_data_url} 
+                      alt={app.name}
+                      className="app-icon"
+                    />
+                  ) : (
+                    <div className="app-icon" style={{display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,opacity:.7}}>APP</div>
+                  )}
+                  <div className="app-glow"></div>
+                </div>
+                <span className="app-name">{app.name}{isFav(app)?' •':''}</span>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
+
+        {/* デスクトップ */}
+        <div className="dashboard-card files-card">
+          <div className="card-header">
+            <h3 className="card-title">
+              <span className="card-icon">FILE</span>
+              デスクトップ
+            </h3>
+            <div className="card-badge">{desktopFiles.length}</div>
+          </div>
+          <div className="files-grid">
+            {desktopFiles.map((file, index) => (
+              <div
+                key={file.path}
+                className="file-card"
+                onClick={() => openFile(file.path)}
+                title={file.path}
+                style={{ animationDelay: `${index * 0.03}s` }}
+              >
+                <div className="file-thumb">
+                  {file.is_dir ? (
+                    <div className="file-glyph">📁</div>
+                  ) : /\.(png|jpg|jpeg|gif|webp|bmp|svg)$/i.test(file.name) ? (
+                    <img src={"file://" + file.path} alt="preview" onError={(e)=>{ (e.target as HTMLImageElement).style.display='none' }} />
+                  ) : (
+                    <div className="file-glyph">📄</div>
+                  )}
+                </div>
+                <div className="file-label" title={file.name}>{file.name}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+  {/* システム情報カードはTopBarに集約するため削除（レイアウト圧迫を回避） */}
+
       </div>
     </div>
   );
 }
 
-export default HomeScreen;
+export default HomeScreen

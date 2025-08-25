@@ -1,68 +1,119 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
-import { IconFolder } from '../assets/icons';
 import './FileManager.css';
 
+type DirInfo = { path: string, name: string, count?: number }
+
 function FileManager() {
-  const [counts, setCounts] = useState<{ pictures: number; documents: number; videos: number; downloads: number; music: number; others: number }>({ pictures: 0, documents: 0, videos: 0, downloads: 0, music: 0, others: 0 });
+  const [home, setHome] = useState<string>('~')
+  const [dirs, setDirs] = useState<Record<string,string>>({})
+  const [counts, setCounts] = useState<Record<string, number>>({})
+  const [section, setSection] = useState<'overview'|'browse'|'actions'>('overview')
+  const [currentPath, setCurrentPath] = useState<string>('')
+  const [entries, setEntries] = useState<Array<{name:string, path:string, kind:'file'|'dir'}>>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  useEffect(() => {
-    api.getFolderCounts().then(setCounts).catch(() => {})
-  }, [])
-
-  // 整理機能は一旦非表示（要望で煩雑）
-
-  const openDownloads = async () => {
+  useEffect(()=>{ (async()=>{
     try {
-      await api.launchApp('xdg-open "$HOME/Downloads"');
-    } catch (e) {
-      console.error('Failed to open Downloads:', e);
-    }
-  };
+      const s = await api.getSettings().catch(()=>({}))
+      const x = await api.getXdgUserDirs().catch(()=>({}))
+      const merged = { ...(s.user_dirs||{}), ...(x||{}) }
+      setDirs(merged as any)
+      setHome(merged.home||'~')
+    } catch {}
+  })() },[])
 
-  const openHome = async () => {
+  useEffect(()=>{ if(section!=='browse' || !currentPath) return; (async()=>{
+    setLoading(true); setError('')
     try {
-      await api.launchApp('xdg-open "$HOME"');
-    } catch (e) {
-      console.error('Failed to open Home:', e);
-    }
-  };
+      const list = await api.listDir(currentPath)
+      setEntries(list.map(i=>({ name: i.name, path: i.path, kind: i.is_dir ? 'dir' : 'file' })))
+    } catch { setError('読み込みに失敗しました') } finally { setLoading(false) }
+  })() },[section, currentPath])
+
+  useEffect(()=>{ (async()=>{
+    const keys = ['desktop','documents','downloads','music','pictures','videos']
+    const r: Record<string, number> = {}
+    await Promise.all(keys.map(async k=>{ const p = dirs[k]; if(!p) return; try { const l = await api.listDir(p); r[k] = l.length } catch {} }))
+    setCounts(r)
+  })() },[dirs])
+
+  const overviewItems: DirInfo[] = useMemo(()=>{
+    const items: DirInfo[] = []
+    const order = ['desktop','documents','downloads','music','pictures','videos']
+    order.forEach(k=>{ const p = (dirs as any)[k]; if(p) items.push({ path:p, name:k, count:counts[k] }) })
+    return items
+  }, [dirs, counts])
+
+  const open = async (p:string)=>{ await api.openPath(p) }
+
+  const browse = (p:string)=>{ setCurrentPath(p); setSection('browse') }
 
   return (
-    <div className="file-manager">
-  <h3>ファイル管理</h3>
-      <div className="folder-categories">
-        <div className="folder-card">
-          <img src={IconFolder} alt="Images" />
-          <span>画像</span>
-          <span className="file-count">📁 {counts.pictures}</span>
-        </div>
-        <div className="folder-card">
-          <img src={IconFolder} alt="Documents" />
-          <span>ドキュメント</span>
-          <span className="file-count">📁 {counts.documents}</span>
-        </div>
-        <div className="folder-card">
-          <img src={IconFolder} alt="Videos" />
-          <span>動画</span>
-          <span className="file-count">📁 {counts.videos}</span>
-        </div>
-        <div className="folder-card">
-          <img src={IconFolder} alt="Others" />
-          <span>その他</span>
-          <span className="file-count">📁 {counts.others}</span>
-        </div>
+    <div className="fm-root">
+      <div className="ba-nav">
+        <button className={`ba-nav-btn ${section==='overview'?'active':''}`} onClick={()=>setSection('overview')}>概要</button>
+        <button className={`ba-nav-btn ${section==='actions'?'active':''}`} onClick={()=>setSection('actions')}>操作</button>
+        <div className="ba-nav-spacer"/>
+        <button className={`ba-nav-btn ${section==='browse'?'active':''}`} disabled={section!=='browse'} onClick={()=>setSection('browse')}>ブラウズ</button>
       </div>
-  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button onClick={openDownloads}>Downloads を開く</button>
-        <button onClick={openHome}>ホームを開く</button>
-        <button onClick={async () => api.launchApp('xdg-open "$HOME/Pictures"')}>Pictures を開く</button>
-        <button onClick={async () => api.launchApp('xdg-open "$HOME/Documents"')}>Documents を開く</button>
-        <button onClick={async () => api.launchApp('xdg-open "$HOME/Videos"')}>Videos を開く</button>
-      </div>
-  {/* {filesOrganized && <p className="organization-message">ファイルが整理されました！</p>} */}
+
+      {section==='overview' && (
+        <div className="folders-overview">
+          <div className="overview-grid">
+            {overviewItems.map(item=> (
+              <div key={item.path} className="folder-card">
+                <div className="folder-meta">
+                  <div className="folder-name">{item.name}</div>
+                  <div className="folder-count">{typeof item.count==='number'?`${item.count} 件`:''}</div>
+                </div>
+                <div className="folder-actions">
+                  <button className="game-btn primary" onClick={()=>open(item.path)}>開く</button>
+                  <button className="game-btn secondary" onClick={()=>browse(item.path)}>中を見る</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {section==='actions' && (
+        <div className="quick-actions">
+          <div className="action-grid">
+            <button className="game-btn" onClick={()=>browse(dirs.desktop||home)}>デスクトップへ</button>
+            <button className="game-btn" onClick={()=>browse(dirs.downloads||home)}>ダウンロードへ</button>
+            <button className="game-btn" onClick={()=>browse(dirs.documents||home)}>ドキュメントへ</button>
+            <button className="game-btn" onClick={()=>browse(dirs.pictures||home)}>ピクチャへ</button>
+            <button className="game-btn" onClick={()=>browse(dirs.music||home)}>ミュージックへ</button>
+            <button className="game-btn" onClick={()=>browse(dirs.videos||home)}>ビデオへ</button>
+          </div>
+        </div>
+      )}
+
+      {section==='browse' && (
+        <div className="browser-view">
+          <div className="browser-header">
+            <div className="current-path">{currentPath||home}</div>
+            <div className="browser-actions">
+              <button className="game-btn secondary" onClick={()=>setSection('overview')}>戻る</button>
+              <button className="game-btn" onClick={()=>open(currentPath||home)}>システムで開く</button>
+            </div>
+          </div>
+          <div className="browser-list">
+            {loading && <div className="browser-status">読み込み中</div>}
+            {error && <div className="browser-status error">{error}</div>}
+            {!loading && !error && entries.map(e=> (
+              <div key={e.path} className={`entry ${e.kind}`} onDoubleClick={()=> e.kind==='dir'? browse(e.path) : open(e.path)}>
+                <span className="entry-name">{e.name}</span>
+                <span className="entry-kind">{e.kind==='dir'?'フォルダ':'ファイル'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
-  );
+  )
 }
 
-export default FileManager;
+export default FileManager

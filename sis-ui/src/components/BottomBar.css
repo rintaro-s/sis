@@ -1,17 +1,198 @@
-.bottom-bar {
+.futuristic-dock {
+  grid-area: footer;
   display: flex;
   align-items: center;
-  height: 58px;
-  background: var(--bg-panel);
-  border-top: 1px solid rgba(167, 199, 231, 0.15);
+  justify-content: space-between;
+  padding: 6px 18px;
+  background: rgba(255, 255, 255, 0.06);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border-top: 1px solid var(--panel-border);
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.08);
+  height: 56px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 余計な背景演出を削除し、クリアな見た目に */
+.futuristic-dock.crystal { background: rgba(255, 255, 255, 0.06); }
+
+/* アプリケーションアイコンエリア */
+.dock-apps {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  justify-content: center;
+  max-width: 800px;
+}
+
+.dock-app {
+  position: relative;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 16px;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: dock-app-entrance 0.6s ease-out;
+}
+
+@keyframes dock-app-entrance {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dock-app:hover {
+  transform: translateY(-8px) scale(1.1);
+}
+
+.app-icon-container {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 14px;
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: all 0.3s ease;
+}
+
+.dock-app:hover .app-icon-container {
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.app-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  object-fit: cover;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.settings-icon {
+  font-size: 28px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+  animation: settings-pulse 3s infinite;
+}
+
+@keyframes settings-pulse {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+/* 強いグローは排除してフラットで現代的に */
+
+.app-tooltip {
+  position: absolute;
+  bottom: 120%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.75);
   color: var(--text-primary);
-  padding: 0 18px;
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  z-index: 1000;
-  font-family: var(--font-family-ui);
-  backdrop-filter: blur(20px) saturate(180%);
-  box-shadow: var(--shadow-soft);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  animation: tooltip-appear 0.2s ease-out;
+}
+
+@keyframes tooltip-appear {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.app-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: rgba(0, 0, 0, 0.9);
+}
+
+/* Dockはアイコンのみに集約 */
+
+.system-tray {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.tray-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transition: all 0.3s ease;
+}
+
+.tray-item:hover {
+  background: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+}
+
+.tray-icon {
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+  .futuristic-dock {
+    padding: 6px 16px;
+    height: 60px;
+  }
+  
+  .dock-apps {
+    gap: 12px;
+  }
+  
+  .app-icon-container {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .app-icon {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .settings-icon {
+    font-size: 24px;
+  }
+  
+  .dock-system {
+    gap: 12px;
+  }
+  
+  .quick-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
 }
 
 .command-prompt {
@@ -112,7 +293,7 @@
   background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
   border: 1px solid rgba(167, 199, 231, 0.3);
   border-radius: 50%;
-  color: white;
+  color: var(--text-primary);
   cursor: pointer;
   display: flex;
   align-items: center;

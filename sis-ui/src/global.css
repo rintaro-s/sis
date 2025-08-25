@@ -2,23 +2,23 @@
 
 :root {
   /* Ethereal Pastel UI Theme - Blue Archive inspired */
-  --color-primary: #a7c7e7; /* soft sky blue */
-  --color-secondary: #e6d7ff; /* lavender */
-  --color-accent: #ffd1dc; /* soft pink */
+  --color-primary: #6aa6e8; /* balanced sky blue */
+  --color-secondary: #c7b8ff; /* lavender */
+  --color-accent: #ffbcd0; /* soft pink */
   --color-danger: #ffc9c9; /* soft coral */
   --color-success: #c7f0c7; /* mint green */
   --color-warning: #fff2cd; /* cream yellow */
   
   /* Backgrounds - luminous and translucent */
   --bg-void: linear-gradient(135deg, #f9fbff 0%, #e8eef6 32%, #f6f9fe 100%);
-  --bg-panel: rgba(255, 255, 255, 0.9);
-  --bg-elevated: rgba(248, 250, 252, 0.85);
-  --bg-glass: rgba(255, 255, 255, 0.4);
+  --bg-panel: rgba(255, 255, 255, 0.95);
+  --bg-elevated: rgba(248, 250, 252, 0.9);
+  --bg-glass: rgba(255, 255, 255, 0.7);
   --bg-glow: radial-gradient(circle, rgba(167, 199, 231, 0.1) 0%, transparent 70%);
   
   /* Text colors - soft and readable */
   --text-primary: #1f2a37; /* darker for better contrast */
-  --text-secondary: #42556b;
+  --text-secondary: #34465a;
   --text-glow: #2563eb;
   --text-magic: #8b5cf6;
   --text-dim: #94a3b8;
@@ -46,6 +46,8 @@
   --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-bounce: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
   --transition-glow: all 0.4s ease-out;
+  --panel-blur: 14px;
+  --shadow-scale: 1;
 }
 
 body {
@@ -59,6 +61,7 @@ body {
   overflow-y: auto;
   color: var(--text-primary);
   font-weight: 400;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Light/Dark quick theme */
@@ -85,6 +88,26 @@ body[data-theme='dark']{
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Manual performance mode */
+body[data-perf='low'] {
+  --panel-blur: 0px;
+  --shadow-scale: 0.5;
+}
+body[data-perf='low'] * {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Accessible focus & hit target */
+button, .theme-button, .app-card, .shortcut-card, .folder-card {
+  min-height: 40px;
+}
+button:focus-visible, .theme-button:focus-visible, .app-card:focus-visible, .shortcut-card:focus-visible, .folder-card:focus-visible {
+  outline: 3px solid rgba(53,107,214,0.5);
+  outline-offset: 2px;
+  border-radius: 10px;
 }
 
 /* Ethereal cursors for delicate interactions */
@@ -152,7 +175,7 @@ input[type="text"], textarea { cursor: text; }
   background: var(--bg-glass);
   /* Reduce blur to cut overdraw/GPU; avoid white-out on scroll */
   backdrop-filter: blur(6px) saturate(140%);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(17, 24, 39, 0.18);
 }
 
 /* General styles for the app container */

@@ -1,69 +1,35 @@
-# React + TypeScript + Vite
+# SIS UI (React + Tauri)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+モダンなデスクトップ体験を目指した SIS UI のフロントエンドです。React + TypeScript + Vite をベースに、Tauri バックエンドと連携します。
 
-Currently, two official plugins are available:
+主な機能
+- アプリ一覧・最近使ったアプリ表示、アプリのピン留め（お気に入り/ドラッグで並べ替え）
+- Snap パッケージの .desktop を自動スキャンしてアプリに統合
+- 最近開いたファイル表示（GTK の recently-used.xbel を参照）
+- ユーティリティ（カレンダー/メモ/タイマー/電卓/ToDo などローカルアプリのランチャ）
+- 設定画面（ドラフト編集 → 保存して終了 / 保存せずに終了）
+  - テーマのプレビュー切替（保存で確定）
+  - ディレクトリのパスはサーバー保存に加えてローカルにもバックアップし、復元
+  - 環境で未対応のコントロールは自動で無効化表示
+- 簡易通知パネル（UI 枠・消去）
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      ...tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      ...tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      ...tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+開発起動
+```
+pnpm install
+pnpm dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+ビルド（Tauri）
 ```
+pnpm build
+pnpm tauri build
+```
+
+設計メモ
+- 設定は UI 内でドラフトとして保持し、保存時にバックエンドの最新設定とディープマージしてから反映します。これにより部分更新で他のキーが消える事故を防ぎます。
+- ディレクトリのパスやテーマはローカルストレージにも保存し、読み込み時にマージして復元します。
+- パフォーマンスのため、透明/ブラー/影などの視覚効果は重い箇所で抑制しています。
+
+既知の制限
+- Google アカウントとの同期は未実装（将来対応）。
+- 通知は簡易UIのみで、システム通知の取り込みは後続拡張予定。

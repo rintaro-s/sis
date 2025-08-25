@@ -1,261 +1,412 @@
+import { useEffect, useState } from 'react'
+import { api } from '../services/api'
+import './Settings.css'
 
-import { useEffect, useRef, useState } from 'react';
-import { api } from '../services/api';
-import './Settings.css';
+const DEFAULT_SETTINGS = { theme: 'system', wallpaper: '', user_dirs: { desktop: '', documents: '', downloads: '', music: '', pictures: '', videos: '' } }
 
-type Props = { onClose?: () => void }
-
-function Settings({ onClose }: Props) {
+function Settings() {
+  const [settings, setSettings] = useState<any>({})
+  const [draft, setDraft] = useState<any>({})
+  const [isDirty, setIsDirty] = useState(false)
   const [volume, setVolume] = useState(50)
   const [brightness, setBrightness] = useState(80)
   const [network, setNetwork] = useState(true)
   const [bluetooth, setBluetooth] = useState(true)
-  const [logPanelOpen, setLogPanelOpen] = useState<null | 'backend' | 'frontend'>(null)
-  const [backendLog, setBackendLog] = useState('')
+  const [systemInfo, setSystemInfo] = useState<any>({})
+  const [sudoPassword, setSudoPassword] = useState('')
+  const [showSudoDialog, setShowSudoDialog] = useState(false)
+  const [pendingAction, setPendingAction] = useState<string>('')
 
-  useEffect(() => {
-    // preload control center state
-    api.controlCenterState().then((s) => {
-      if (!s) return
-      if (typeof s.volume === 'number') setVolume(s.volume)
-      if (typeof s.brightness === 'number') setBrightness(s.brightness)
-      if (typeof s.network === 'boolean') setNetwork(s.network)
-      if (typeof s.bluetooth === 'boolean') setBluetooth(s.bluetooth)
-    }).catch(()=>{})
-  }, [])
-
-  const applyVolume = async (v: number) => {
-    setVolume(v)
-    const r = await api.setVolume(v)
-    if (!r.ok) alert('音量変更に失敗しました')
-  }
-  const applyBrightness = async (v: number) => {
-    setBrightness(v)
-    const r = await api.setBrightness(v)
-    if (!r.ok) alert('輝度変更に失敗しました')
-  }
-  const toggleNetwork = async () => {
-    const next = !network
-    setNetwork(next)
-    const r = await api.networkSet(next)
-    if (!r.ok) alert('ネットワーク切替に失敗しました')
-  }
-  const toggleBluetooth = async () => {
-    const next = !bluetooth
-    setBluetooth(next)
-    const r = await api.bluetoothSet(next)
-    if (!r.ok) alert('Bluetooth切替に失敗しました')
-  }
-  const power = async (action: 'shutdown' | 'reboot' | 'logout') => {
-    const r = await api.powerAction(action)
-    if (!r.ok) alert('電源操作に失敗しました')
-  }
-
-  // LLM / 設定ストレージ（ドラフト編集）
-  const [settings, setSettings] = useState<any | null>(null)
-  const [draft, setDraft] = useState<any | null>(null)
-  const initialTheme = useRef<string | null>(document.body.dataset.theme || null)
-  const [advOpen, setAdvOpen] = useState(false)
-  const [localModels, setLocalModels] = useState<string[]>([])
-
-  useEffect(() => {
-    api.getSettings().then((s) => { setSettings(s); setDraft(s ? JSON.parse(JSON.stringify(s)) : {}) })
-  }, [])
-  useEffect(() => { api.listLocalModels().then(setLocalModels) }, [])
-
-  // テーマ: 開いたときに強制適用しない。ユーザー操作時のみプレビュー。
-  const currentTheme = (document.body.dataset.theme as 'light' | 'dark' | undefined)
-    || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-  const [themeDraft, setThemeDraft] = useState<'dark' | 'light'>(() => (draft?.theme as any) || (settings?.theme as any) || currentTheme)
-  const applyThemePreview = (t: 'dark' | 'light') => { setThemeDraft(t); document.body.dataset.theme = t; try { localStorage.setItem('sis-theme-preview', t) } catch {} }
-
-  // ドラフト更新（即保存しない）
-  const patchDraft = (patch: any) => { setDraft((prev: any) => deepMerge(prev || {}, patch)) }
-  const deepMerge = (base: any, patch: any): any => {
-    if (!patch || typeof patch !== 'object') return base
-    const out: any = Array.isArray(base) ? [...base] : { ...(base || {}) }
-    for (const k of Object.keys(patch)) {
-      const v = patch[k]
-      if (v && typeof v === 'object' && !Array.isArray(v)) out[k] = deepMerge(out[k] || {}, v)
-      else out[k] = v
+  useEffect(() => { (async()=>{
+    try {
+      const saved = await api.getSettings().catch(()=>DEFAULT_SETTINGS)
+      const merged = { ...DEFAULT_SETTINGS, ...saved }
+      try { const xdg = await api.getXdgUserDirs(); merged.user_dirs = { ...merged.user_dirs, ...xdg } } catch {}
+      setSettings(merged); setDraft(JSON.parse(JSON.stringify(merged)))
+  // ディレクトリ一覧能力チェックは不要
+      
+      // システム制御状態を取得
+      try {
+        const controlState = await api.controlCenterState()
+        if (controlState) {
+          if (typeof controlState.volume === 'number') setVolume(controlState.volume)
+          if (typeof controlState.brightness === 'number') setBrightness(controlState.brightness)
+          if (typeof controlState.network === 'boolean') setNetwork(controlState.network)
+          if (typeof controlState.bluetooth === 'boolean') setBluetooth(controlState.bluetooth)
+        }
+      } catch (error) {
+        console.warn('コントロールセンター状態の取得に失敗:', error)
+        // デフォルト値を使用（ダミーではなく不明として扱う）
+      }
+      
+      // システム情報を取得
+      try {
+        const detailedInfo = await api.getDetailedSystemInfo()
+        setSystemInfo(detailedInfo)
+      } catch (error) {
+        console.warn('詳細システム情報の取得に失敗:', error)
+        setSystemInfo({
+          os: 'N/A',
+          kernel: 'N/A',
+          uptime: 'N/A',
+          cpu: 'N/A',
+          memory: { total: 'N/A', used: 'N/A', available: 'N/A' },
+          disk: { total: 'N/A', used: 'N/A', available: 'N/A' }
+        })
+      }
+    } catch { 
+      setSettings(DEFAULT_SETTINGS); 
+      setDraft(JSON.parse(JSON.stringify(DEFAULT_SETTINGS))) 
     }
-    return out
-  }
-  const saveAndExit = async () => {
-    const server = await api.getSettings().catch(() => ({}))
-    const merged = deepMerge(server || {}, deepMerge(draft || {}, { theme: themeDraft }))
-    await api.setSettings(merged)
-    try { localStorage.setItem('sis-theme', themeDraft) } catch {}
-    if (onClose) onClose()
-  }
-  const discardAndExit = () => {
-    const orig = initialTheme.current
-    if (orig) document.body.dataset.theme = orig
-    else delete (document.body.dataset as any).theme
-    try { localStorage.removeItem('sis-theme-preview') } catch {}
-    if (onClose) onClose()
+  })() }, [])
+
+  useEffect(()=>{ setIsDirty(JSON.stringify(settings)!==JSON.stringify(draft)) }, [settings, draft])
+
+  // ディレクトリパスはXDG自動検出を使用
+
+  // 保存時に壁紙の即時適用も行う
+  const discard = () => { setDraft(JSON.parse(JSON.stringify(settings))); setIsDirty(false) }
+
+  const setVol = async (v:number)=>{ setVolume(v); const r = await api.setVolume(v); if(!r.ok) alert('音量の変更に失敗') }
+  const setBrt = async (v:number)=>{ setBrightness(v); const r = await api.setBrightness(v); if(!r.ok) alert('輝度の変更に失敗') }
+  const toggleNet = async ()=>{ const n=!network; setNetwork(n); const r=await api.networkSet(n); if(!r.ok) alert('ネットワーク切替に失敗') }
+  const toggleBt = async ()=>{ const n=!bluetooth; setBluetooth(n); const r=await api.bluetoothSet(n); if(!r.ok) alert('Bluetooth切替に失敗') }
+  const power = async (a:'shutdown'|'reboot'|'logout')=>{ 
+    const label = a==='shutdown'?'シャットダウン':a==='reboot'?'再起動':'ログアウト'
+    if(!confirm(`${label}を実行します。よろしいですか？`)) return
+    const r=await api.powerAction(a); if(!r.ok) alert('電源操作に失敗') 
   }
 
-  const llmMode = (draft?.llm_mode ?? settings?.llm_mode) ?? 'lmstudio'
-  const isLocalMode = llmMode === 'local'
-  const appSort = (draft?.app_sort ?? settings?.app_sort) ?? 'name'
+  const applyTheme = async (theme: string) => {
+    setDraft((p:any)=>({...p, theme}))
+    
+    // システムのテーマも変更
+    if (theme === 'light' || theme === 'dark') {
+      const result = await api.ubuntuSetTheme(theme)
+      if (!result.ok) {
+        console.warn('システムテーマの変更に失敗:', result.message)
+      }
+    }
+    
+    // CSSクラスを即座に適用
+  const applied = theme === 'system' ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme
+  document.documentElement.className = applied === 'light' ? 'light-theme' : 'dark-theme'
+  localStorage.setItem('sis-theme', applied)
+  }
+  const save = async () => { try { 
+    await api.setSettings(draft); 
+    setSettings(JSON.parse(JSON.stringify(draft))); 
+    setIsDirty(false); 
+    localStorage.setItem('sis-ui-settings-backup', JSON.stringify(draft))
+    // 壁紙の即時適用（CSS変数に設定）
+    if (draft.wallpaper) {
+      const v = draft.wallpaper.trim()
+      const isUrlFunc = /^url\(/i.test(v)
+      const cssVal = isUrlFunc ? v : `url('${v}')`
+      document.documentElement.style.setProperty('--desktop-wallpaper', cssVal)
+    } else {
+      document.documentElement.style.removeProperty('--desktop-wallpaper')
+    }
+  } catch { alert('保存に失敗しました') } }
+
+  const requestSudoAction = (action: string) => {
+    setPendingAction(action)
+    setShowSudoDialog(true)
+  }
+
+  const executeSudoAction = async () => {
+    if (!sudoPassword || !pendingAction) return
+    
+    let command = ''
+    switch (pendingAction) {
+      case 'update':
+        command = 'apt update && apt upgrade -y'
+        break
+      case 'settings':
+        try {
+          const r = await api.ubuntuSystemSettings()
+          if (!r.ok) throw new Error(r.message)
+        } catch {
+          // フォールバック: gnome-control-center を直接起動
+          await api.runSafeCommand('bash -lc "(gnome-control-center >/dev/null 2>&1 & disown) || (systemsettings5 >/dev/null 2>&1 & disown) || true"')
+        }
+        setShowSudoDialog(false); setSudoPassword(''); setPendingAction(''); return
+      case 'software':
+        try {
+          const r = await api.ubuntuSoftwareCenter()
+          if (!r.ok) throw new Error(r.message)
+        } catch {
+          // フォールバック: gnome-software などを起動
+          await api.runSafeCommand('bash -lc "(gnome-software >/dev/null 2>&1 & disown) || (software-center >/dev/null 2>&1 & disown) || true"')
+        }
+        setShowSudoDialog(false); setSudoPassword(''); setPendingAction(''); return
+      case 'probe-info':
+        command = 'uname -a && lsb_release -a || true';
+        break
+    }
+    
+    if (command) {
+      const result = await api.runWithSudo(command, sudoPassword)
+      if (result.ok) {
+        alert('操作が正常に完了しました')
+      } else {
+        alert('操作に失敗しました: ' + result.message)
+      }
+    }
+    
+    setShowSudoDialog(false)
+    setSudoPassword('')
+    setPendingAction('')
+  }
 
   return (
-    <div className="settings">
-      <h3>設定</h3>
-    <div className="setting-item">
-        <span>バックログ</span>
-        <label className="switch">
-      <input type="checkbox" checked={!!(draft?.logging_enabled ?? settings?.logging_enabled)} onChange={(e)=>patchDraft({ logging_enabled: e.target.checked })} />
-          <span className="slider round"></span>
-        </label>
-      </div>
-      <div className="setting-item">
-        <span>テーマ</span>
-        <div className="theme-selector">
-      <button className={`theme-button ${themeDraft==='dark'?'active':''}`} onClick={()=>applyThemePreview('dark')}>ダーク</button>
-      <button className={`theme-button ${themeDraft==='light'?'active':''}`} onClick={()=>applyThemePreview('light')}>ライト</button>
-        </div>
-      </div>
-      <div className="setting-item">
-        <span>音量</span>
-  <input type="range" min="0" max="100" value={volume} className="range-slider" onChange={(e) => applyVolume(Number(e.target.value))} />
-      </div>
-      <div className="setting-item">
-        <span>輝度</span>
-  <input type="range" min="0" max="100" value={brightness} className="range-slider" onChange={(e) => applyBrightness(Number(e.target.value))} />
-      </div>
-      <div className="setting-item">
-        <span>ネットワーク</span>
-        <label className="switch">
-          <input type="checkbox" checked={network} onChange={toggleNetwork} />
-          <span className="toggle-slider"></span>
-        </label>
-      </div>
-      <div className="setting-item">
-        <span>Bluetooth</span>
-        <label className="switch">
-          <input type="checkbox" checked={bluetooth} onChange={toggleBluetooth} />
-          <span className="toggle-slider"></span>
-        </label>
-      </div>
-      <div className="setting-item">
-        <span>アプリの並び順</span>
-        <div className="theme-selector">
-          <button className={`theme-button ${appSort==='name'?'active':''}`} onClick={()=>patchDraft({ app_sort: 'name' })}>名前</button>
-          <button className={`theme-button ${appSort==='recent'?'active':''}`} onClick={()=>patchDraft({ app_sort: 'recent' })}>最近</button>
-        </div>
-      </div>
-      <div className="setting-item">
-        <span>ディレクトリのパス</span>
-        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8, width: '100%' }}>
-          {['desktop','documents','downloads','pictures','music','videos'].map((k)=>{
-            const val = draft?.user_dirs?.[k] ?? settings?.user_dirs?.[k] ?? ''
-            return (
-              <>
-                <label key={k+':label'} style={{ alignSelf: 'center' }}>{k}</label>
-                <input key={k+':input'} value={val} placeholder={`~/`+k}
-                  onChange={(e)=>patchDraft({ user_dirs: { ...((draft?.user_dirs||settings?.user_dirs)||{}), [k]: e.target.value } })} />
-              </>
-            )
-          })}
-        </div>
-      </div>
-      <div className="setting-item">
-        <span>LLM（LM Studio/ローカルGGUF）</span>
-        <div className="theme-selector">
-          <button className={`theme-button ${llmMode==='lmstudio'?'active':''}`} onClick={()=>patchDraft({ llm_mode: 'lmstudio' })}>LM Studio</button>
-          <button className={`theme-button ${llmMode==='local'?'active':''}`} onClick={()=>patchDraft({ llm_mode: 'local' })}>ローカル</button>
-        </div>
-        <div style={{ marginTop: 6 }}>
-          <button className="theme-button" onClick={()=>setAdvOpen(v=>!v)}>{advOpen?'拡張設定を閉じる':'拡張設定を表示'}</button>
-        </div>
-        {advOpen && (
-          <>
-            {llmMode==='lmstudio' && (
-              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8, marginTop: 8 }}>
-                <label>エンドポイント</label>
-                <input value={(draft?.llm_remote_url ?? settings?.llm_remote_url) || ''} placeholder="http://localhost:1234/v1/chat/completions" onChange={(e)=>patchDraft({ llm_remote_url: (e.target as HTMLInputElement).value })} />
-                <label>モデル</label>
-                <input value={(draft?.llm_model ?? settings?.llm_model) || ''} placeholder="qwen3-14b@q4_k_m" onChange={(e)=>patchDraft({ llm_model: (e.target as HTMLInputElement).value })} />
-                <label>APIキー</label>
-                <input value={(draft?.llm_api_key ?? settings?.llm_api_key) || ''} placeholder="必要な場合のみ" onChange={(e)=>patchDraft({ llm_api_key: (e.target as HTMLInputElement).value })} />
-                <label>localhostなら自動起動</label>
-                <label className="switch">
-                  <input type="checkbox" checked={!!(draft?.llm_autostart_localhost ?? settings?.llm_autostart_localhost)} onChange={(e)=>patchDraft({ llm_autostart_localhost: e.target.checked })} />
-                  <span className="toggle-slider"></span>
-                </label>
-                <div></div>
-                <button className="theme-button" onClick={async()=>{ const r = await api.tryStartLmStudio(); alert(r.message||'') }}>LM Studio 起動</button>
-              </div>
-            )}
-            {isLocalMode && (
-              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8, marginTop: 8 }}>
-                <label>HFモデルID</label>
-                <input value={(draft?.hf_model_id ?? settings?.hf_model_id) || ''} placeholder="TheBloke/Qwen-2-7B-GGUF" onChange={(e)=>patchDraft({ hf_model_id: (e.target as HTMLInputElement).value })} />
-                <div></div>
-                <button className="theme-button" onClick={async()=>{
-                  const mid = draft?.hf_model_id ?? settings?.hf_model_id
-                  if (!mid) { alert('モデルIDを入力してください'); return }
-                  const r = await api.llmDownloadHf(mid)
-                  if (r.ok) { setLocalModels(await api.listLocalModels()); alert('ダウンロード完了: '+(r.path||'')) }
-                  else { alert(r.message||'ダウンロード失敗') }
-                }}>ダウンロード</button>
-                <label>ローカルモデル</label>
-                <select value={(draft?.local_model_path ?? settings?.local_model_path) || ''} onChange={(e)=>patchDraft({ local_model_path: (e.target as HTMLSelectElement).value })}>
-                  <option value="">選択してください</option>
-                  {localModels.map((p)=> (<option key={p} value={p}>{p}</option>))}
-                </select>
-              </div>
-            )}
-            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85 }}>
-              <div>LM Studio 既定: http://localhost:1234/v1/chat/completions / モデル: qwen3-14b@q4_k_m</div>
-              <div>ローカル: ~/.local/share/sis-ui/models 以下の .gguf を自動検出します</div>
-            </div>
-          </>
-        )}
-      </div>
-      <div className="setting-item">
-        <span>電源</span>
-        <div className="theme-selector">
-          <button className="theme-button" onClick={() => power('logout')}>ログアウト</button>
-          <button className="theme-button" onClick={() => power('reboot')}>再起動</button>
-          <button className="theme-button" onClick={() => power('shutdown')}>シャットダウン</button>
-        </div>
-      </div>
-
-      <div className="setting-item">
-        <span>ログ</span>
-        <div className="theme-selector" style={{ gap: 8 }}>
-          <button className="theme-button" onClick={async()=>{ setLogPanelOpen('backend'); setBackendLog(await api.getBackendLog(500)); }}>バックエンド</button>
-          <button className="theme-button" onClick={()=> setLogPanelOpen('frontend') }>フロントエンド</button>
-        </div>
-      </div>
-
-      {logPanelOpen && (
-        <div style={{ marginTop: 10, textAlign:'left' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-            <div style={{ fontSize: 13, opacity:.9 }}>{logPanelOpen==='backend'?'バックエンドログ（最新 約500行）':'フロントログ（直近出力）'}</div>
-            <div style={{ display:'flex', gap:8 }}>
-              {logPanelOpen==='backend' && (<>
-                <button onClick={async()=>setBackendLog(await api.getBackendLog(500))}>再読込</button>
-                <button onClick={async()=>{ await api.clearBackendLog(); setBackendLog(''); }}>消去</button>
+    <div className="settings-container">
+      <div className="settings-header">
+        <div className="game-card large">
+          <div className="game-card-header">
+            <h2 className="game-card-title">システム設定</h2>
+            <div className="settings-actions">
+              {isDirty && (<>
+                <button className="game-btn primary" onClick={save}>保存して終了</button>
+                <button className="game-btn secondary" onClick={discard}>変更を破棄</button>
+                <button className="game-btn secondary" onClick={async()=>{ 
+                  await save(); 
+                  // テーマをOSにも反映（Ubuntu/GNOME）
+                  const t = (draft.theme||'system')
+                  if (t==='light' || t==='dark') { await api.ubuntuSetTheme(t) }
+                  // 軽い再起動: UI をリロード
+                  setTimeout(()=>location.reload(), 200); 
+                }}>保存して環境を再起動</button>
               </>)}
-              <button onClick={()=>setLogPanelOpen(null)}>閉じる</button>
             </div>
           </div>
-          <pre style={{ whiteSpace:'pre-wrap', color:'#cfe6ff', fontSize:12, maxHeight: 260, overflow:'auto', margin:0, background:'rgba(0,0,0,0.25)', padding:8, borderRadius:8 }}>
-            {logPanelOpen==='backend' ? backendLog : '(直近のAI/コマンド出力をここに表示します)'}
-          </pre>
+        </div>
+      </div>
+
+      <div className="settings-grid">
+        <div className="game-card">
+          <div className="game-card-header"><h3 className="game-card-title">システムコントロール</h3></div>
+          <div className="settings-section">
+            <div className="control-grid">
+              <div className="control-item">
+                <label className="setting-label">音量</label>
+                <div className="slider-container">
+                  <input type="range" min="0" max="100" value={volume} onChange={e=>setVol(Number(e.target.value))} className="game-slider" />
+                  <span className="slider-value">{volume}%</span>
+                </div>
+              </div>
+              <div className="control-item">
+                <label className="setting-label">輝度</label>
+                <div className="slider-container">
+                  <input type="range" min="0" max="100" value={brightness} onChange={e=>setBrt(Number(e.target.value))} className="game-slider" />
+                  <span className="slider-value">{brightness}%</span>
+                </div>
+              </div>
+              <div className="control-item">
+                <label className="setting-label">ネットワーク</label>
+                <button className={`game-btn toggle ${network?'active':''}`} onClick={toggleNet}>{network?'オン':'オフ'}</button>
+              </div>
+              <div className="control-item">
+                <label className="setting-label">Bluetooth</label>
+                <button className={`game-btn toggle ${bluetooth?'active':''}`} onClick={toggleBt}>{bluetooth?'オン':'オフ'}</button>
+              </div>
+            </div>
+            <div className="power-controls">
+              <button className="game-btn danger small" onClick={()=>power('logout')}>ログアウト</button>
+              <button className="game-btn danger small" onClick={()=>power('reboot')}>再起動</button>
+              <button className="game-btn danger small" onClick={()=>power('shutdown')}>シャットダウン</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="game-card">
+          <div className="game-card-header"><h3 className="game-card-title">外観設定</h3></div>
+          <div className="settings-section">
+            <div className="setting-group">
+              <label className="setting-label">テーマ</label>
+              <div style={{ display:'flex', gap:8 }}>
+                {['system','light','dark'].map(t=> (
+                  <button key={t} className={`game-btn ${draft.theme===t?'primary':'secondary'}`} onClick={()=>applyTheme(t)}>{t==='system'?'システム':t==='light'?'ライト':'ダーク'}</button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-group">
+              <label className="setting-label">壁紙（SIS UI のみ適用）</label>
+              <div style={{ display:'flex', gap:8 }}>
+                <input type="text" className="game-input" value={draft.wallpaper||''} onChange={e=>setDraft((p:any)=>({...p, wallpaper:e.target.value}))} placeholder="/path/to/wallpaper.jpg または url(...)" />
+                <button className="game-btn secondary" onClick={async()=>{
+                  const picked = await api.pickImageFile(); if (!picked) return;
+                  // 保存用には実パス/URL文字列、表示用にはCSS url(...) を使い分ける
+                  setDraft((p:any)=>({ ...p, wallpaper: picked }))
+                  const cssVal = await api.cssUrlForPath(picked)
+                  document.documentElement.style.setProperty('--desktop-wallpaper', cssVal)
+                  // 即時保存して次回起動時も反映
+                  try { await api.setSettings({ ...draft, wallpaper: picked }) } catch {}
+                }}>画像を選択</button>
+                <button className="game-btn secondary" onClick={async()=>{
+                  setDraft((p:any)=>({ ...p, wallpaper: '' }))
+                  document.documentElement.style.removeProperty('--desktop-wallpaper')
+                  try { await api.setSettings({ ...draft, wallpaper: '' }) } catch {}
+                }}>クリア</button>
+              </div>
+              <div style={{ fontSize:12, opacity:.7, marginTop:6 }}>注: OS全体の壁紙は変更しません。</div>
+            </div>
+          </div>
+        </div>
+
+  {/* ディレクトリ設定は現状UIからは非表示（XDG自動検出を使用） */}
+
+        <div className="game-card">
+          <div className="game-card-header"><h3 className="game-card-title">Ubuntu システム管理</h3></div>
+          <div className="settings-section">
+            <div className="control-grid">
+              <div className="control-item">
+                <label className="setting-label">システム更新 (sudo)</label>
+                <button className="game-btn primary" onClick={() => requestSudoAction('update')}>
+                  更新を実行
+                </button>
+              </div>
+              <div className="control-item">
+                <label className="setting-label">システム設定</label>
+                <button className="game-btn secondary" title="Ubuntuの設定アプリを開きます" onClick={() => requestSudoAction('settings')}>
+                  設定を開く
+                </button>
+              </div>
+              <div className="control-item">
+                <label className="setting-label">ソフトウェア管理</label>
+                <button className="game-btn secondary" title="ソフトウェアセンターを起動" onClick={() => requestSudoAction('software')}>
+                  Software Center
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="game-card accent">
+          <div className="game-card-header"><h3 className="game-card-title">詳細システム情報</h3></div>
+          <div className="settings-section">
+            <div className="info-grid">
+              <div className="info-item">
+                <span className="info-label">OS</span>
+                <span className="info-value">{systemInfo.os || 'Ubuntu Linux'}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">カーネル</span>
+                <span className="info-value">{systemInfo.kernel || 'Unknown'}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">稼働時間</span>
+                <span className="info-value">{systemInfo.uptime || 'Unknown'}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">CPU</span>
+                <span className="info-value">{systemInfo.cpu || 'Unknown'}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">メモリ</span>
+                <span className="info-value">
+                  {systemInfo.memory ? `${systemInfo.memory.used} / ${systemInfo.memory.total}` : 'Unknown'}
+                </span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">ディスク</span>
+                <span className="info-value">
+                  {systemInfo.disk ? `${systemInfo.disk.used} / ${systemInfo.disk.total}` : 'Unknown'}
+                </span>
+              </div>
+            </div>
+            <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+              <button className="game-btn secondary" onClick={async()=>{
+                const info = await api.getDetailedSystemInfo();
+                setSystemInfo(info);
+              }}>再取得</button>
+              <button className="game-btn secondary" onClick={()=>{ setPendingAction('probe-info'); setShowSudoDialog(true); }}>sudoで情報取得</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="game-card accent">
+          <div className="game-card-header"><h3 className="game-card-title">システム情報</h3></div>
+          <div className="settings-section">
+            <div className="info-grid">
+              <div className="info-item">
+                <span className="info-label">OS</span>
+                <span className="info-value">{systemInfo.os || 'N/A'}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">カーネル</span>
+                <span className="info-value">{systemInfo.kernel || 'N/A'}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">稼働時間</span>
+                <span className="info-value">{systemInfo.uptime || 'N/A'}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">CPU</span>
+                <span className="info-value">{systemInfo.cpu || 'N/A'}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">メモリ使用量</span>
+                <span className="info-value">
+                  {systemInfo.memory ? `${systemInfo.memory.used} / ${systemInfo.memory.total}` : 'N/A'}
+                </span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">ディスク使用量</span>
+                <span className="info-value">
+                  {systemInfo.disk ? `${systemInfo.disk.used} / ${systemInfo.disk.total}` : 'N/A'}
+                </span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">UI バージョン</span>
+                <span className="info-value">SIS-UI 0.1.0</span>
+              </div>
+              
+              <div className="info-item">
+                <span className="info-label">設定状態</span>
+                <span className={`info-status ${isDirty?'modified':'saved'}`}>
+                  {isDirty?'変更あり':'保存済み'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Sudo権限要求ダイアログ */}
+      {showSudoDialog && (
+        <div className="modal-overlay">
+          <div className="modal-content sudo-dialog">
+            <h3>管理者権限が必要です</h3>
+            <p>この操作には管理者権限が必要です。パスワードを入力してください。</p>
+            <div className="setting-group">
+              <label className="setting-label">パスワード</label>
+              <input
+                type="password"
+                className="game-input"
+                value={sudoPassword}
+                onChange={(e) => setSudoPassword(e.target.value)}
+                placeholder="sudo パスワード"
+                onKeyPress={(e) => e.key === 'Enter' && executeSudoAction()}
+              />
+            </div>
+            <div className="dialog-actions">
+              <button className="game-btn secondary" onClick={() => {
+                setShowSudoDialog(false)
+                setSudoPassword('')
+                setPendingAction('')
+              }}>
+                キャンセル
+              </button>
+              <button className="game-btn primary" onClick={executeSudoAction}>
+                実行
+              </button>
+            </div>
+          </div>
         </div>
       )}
-
-      <div className="settings-footer">
-        <button className="theme-button secondary" onClick={discardAndExit}>保存せずに終了</button>
-        <button className="theme-button primary" onClick={saveAndExit}>保存して終了</button>
-      </div>
     </div>
-  );
+  )
 }
 
-export default Settings;
+export default Settings

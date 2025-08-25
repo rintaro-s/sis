@@ -6,7 +6,6 @@ log() { echo -e "[deploy] $*"; }
 die() { echo -e "[deploy][ERROR] $*" >&2; exit 1; }
 
 # NOTE:
-# このスクリプトは Ubuntu 実機でのみ実行してください（Windows では動作しません）。
 # 事前に Tauri バイナリをビルドしておき、生成物を同梱して .deb を作ります。
 
 # --- Configuration ---
@@ -33,6 +32,8 @@ mkdir -p "$PKG_DIR/opt/$APP_ID"
 mkdir -p "$PKG_DIR/usr/share/applications"
 mkdir -p "$PKG_DIR/usr/share/icons/hicolor/256x256/apps"
 mkdir -p "$PKG_DIR/etc/xdg/autostart"
+
+sudo apt remove sis-ui -y || true
 
 echo "[2/5] Build frontend & Tauri app (release)"
 # 1. フロントエンド（Vite/React）
@@ -202,16 +203,26 @@ GUI_DETECTED=0
 if [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]; then GUI_DETECTED=1; fi
 echo
 if [[ $GUI_DETECTED -eq 1 ]]; then
+	LAUNCH_MODE=${LAUNCH_MODE:-user} # user|sudo（既定: user）
 	read -r -p "Launch $APP_NAME now? [y/N]: " RESP || true
 	case "${RESP:-}" in
 		y|Y)
-			log "Launching /usr/bin/$APP_ID ..."
-			nohup "/usr/bin/$APP_ID" >/tmp/${APP_ID}.log 2>&1 &
+			if [[ "$LAUNCH_MODE" == "sudo" ]]; then
+				log "Launching /usr/bin/$APP_ID with sudo (LAUNCH_MODE=sudo) ..."
+				nohup sudo "/usr/bin/$APP_ID" >/tmp/${APP_ID}.log 2>&1 &
+			else
+				log "Launching /usr/bin/$APP_ID (user) ..."
+				nohup "/usr/bin/$APP_ID" >/tmp/${APP_ID}.log 2>&1 &
+			fi
 			sleep 1
 			log "Tail /tmp/${APP_ID}.log (Ctrl+C to stop):"; tail -n 50 /tmp/${APP_ID}.log || true
 			;;
 		*)
-			log "You can launch later with: /usr/bin/$APP_ID" ;;
+			if [[ "$LAUNCH_MODE" == "sudo" ]]; then
+				log "You can launch later with: sudo /usr/bin/$APP_ID"
+			else
+				log "You can launch later with: /usr/bin/$APP_ID"
+			fi ;;
 	 esac
 else
 	log "No GUI environment (DISPLAY/WAYLAND_DISPLAY not set). Skipping launch."

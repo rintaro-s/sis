@@ -2,8 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import './CommandPalette.css'
 import { api } from '../services/api'
 
-export default function CommandPalette() {
-  const [open, setOpen] = useState(false)
+type CommandPaletteProps = {
+  isVisible: boolean;
+  onClose: () => void;
+};
+
+export default function CommandPalette({ isVisible, onClose }: CommandPaletteProps) {
   const [q, setQ] = useState('')
   const [apps, setApps] = useState<{ name: string; exec?: string }[]>([])
   const [settings, setSettings] = useState<any | null>(null)
@@ -11,22 +15,17 @@ export default function CommandPalette() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
-        e.preventDefault()
-        setOpen((v) => !v)
-        setTimeout(() => inputRef.current?.focus(), 0)
-      }
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
   useEffect(() => {
-    if (!open) return
+    if (!isVisible) return
     api.getRecentApps().then(setApps).catch(() => setApps([]))
   api.getSettings().then(setSettings)
-  }, [open])
+  }, [isVisible])
 
   const items = useMemo(() => {
     const staticItems = [
@@ -57,7 +56,7 @@ export default function CommandPalette() {
   const run = async (id: string) => {
     if (id === 'screenshot') await api.takeScreenshot()
     if (id === 'music-play') await api.playPauseMusic()
-  if (id === 'settings') { window.dispatchEvent(new Event('sis:open-settings')); setOpen(false); return }
+  if (id === 'settings') { window.dispatchEvent(new Event('sis:open-settings')); onClose(); return }
   if (id === 'logs-backend') { alert('設定→ログから表示できます'); return }
     if (id.startsWith('app:')) {
       const name = id.slice(4)
@@ -66,7 +65,7 @@ export default function CommandPalette() {
         await api.launchApp(app.exec)
       }
     }
-    setOpen(false)
+    onClose()
   }
 
   function extractBash(text: string): string | null {
@@ -106,7 +105,7 @@ export default function CommandPalette() {
           await api.runSafeCommand(cmd);
         }
       }
-      setOpen(false);
+      onClose();
       return;
     }
     // 通常は最初の候補を実行
@@ -114,10 +113,10 @@ export default function CommandPalette() {
     if (first) await run(first.id);
   }
 
-  if (!open) return null
+  if (!isVisible) return null
 
   return (
-    <div className="palette-root" onClick={() => setOpen(false)}>
+    <div className="palette-root" onClick={onClose}>
       <div className="palette" onClick={(e) => e.stopPropagation()}>
         <input
           ref={inputRef}
