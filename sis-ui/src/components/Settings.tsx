@@ -297,6 +297,44 @@ function Settings() {
   {/* ディレクトリ設定は現状UIからは非表示（XDG自動検出を使用） */}
 
         <div className="game-card">
+          <div className="game-card-header"><h3 className="game-card-title">LM Studio 接続設定</h3></div>
+          <div className="settings-section">
+            <div className="setting-group">
+              <label className="setting-label">接続モード</label>
+              <div style={{ display:'flex', gap:8 }}>
+                {['lmstudio','local'].map(t=> (
+                  <button key={t} className={`game-btn ${draft.llm_mode===t?'primary':'secondary'}`} onClick={()=>setDraft((p:any)=>({ ...p, llm_mode:t }))}>{t}</button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-group">
+              <label className="setting-label">LM Studio サーバーURL</label>
+              <input type="text" className="game-input" value={draft.llm_remote_url||''} onChange={e=>setDraft((p:any)=>({ ...p, llm_remote_url:e.target.value }))} placeholder="http://localhost:1234/v1/chat/completions" />
+            </div>
+            <div className="setting-group">
+              <label className="setting-label">モデル名</label>
+              <input type="text" className="game-input" value={draft.llm_model||''} onChange={e=>setDraft((p:any)=>({ ...p, llm_model:e.target.value }))} placeholder="例: qwen3-14b@q4_k_m" />
+            </div>
+            <div className="setting-group">
+              <label className="setting-label">APIキー（必要な場合）</label>
+              <input type="password" className="game-input" value={draft.llm_api_key||''} onChange={e=>setDraft((p:any)=>({ ...p, llm_api_key:e.target.value }))} />
+            </div>
+            <div className="setting-group" style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <label className="setting-label">localhost の場合は自動起動を試行</label>
+              <button className={`game-btn ${draft.llm_autostart_localhost?'primary':'secondary'}`} onClick={()=>setDraft((p:any)=>({ ...p, llm_autostart_localhost: !p.llm_autostart_localhost }))}>{draft.llm_autostart_localhost?'有効':'無効'}</button>
+            </div>
+            <div style={{ display:'flex', gap:8, marginTop:8 }}>
+              <button className="game-btn primary" onClick={save}>保存</button>
+              <button className="game-btn secondary" onClick={async()=>{ try { const s = await api.getSettings(); setDraft(s); } catch {} }}>再読込</button>
+              <button className="game-btn secondary" onClick={()=>{
+                const u = draft.llm_remote_url || 'http://localhost:1234/v1/chat/completions'
+                alert(`現在の接続先: ${u}`)
+              }}>接続先を確認</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="game-card">
           <div className="game-card-header"><h3 className="game-card-title">Ubuntu システム管理</h3></div>
           <div className="settings-section">
             <div className="control-grid">

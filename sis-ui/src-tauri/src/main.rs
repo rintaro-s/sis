@@ -1327,7 +1327,33 @@ fn main() {
                 // attempt to get via handle (use get_webview_window for AppHandle compatibility)
                 app.handle().get_webview_window("main")
             });
-            let _window = window.expect("main window not found");
+            let window = window.expect("main window not found");
+
+            // Register a global shortcut for Command/Ctrl+P to toggle command palette.
+            // Note: On Wayland, global shortcuts may be restricted by the compositor; this works best on Xorg.
+            let gs = app.handle().global_shortcut();
+            let app_handle = app.handle();
+            let _ = gs.register("CommandOrControl+P");
+            let _ = gs.register("Ctrl+P");
+            let win_label = window.label().to_string();
+            let _ = gs.on_shortcut(
+                "CommandOrControl+P",
+                move |_shortcut| {
+                    if let Some(w) = app_handle.get_webview_window(&win_label) {
+                        let _ = w.emit("super_key_pressed", "ctrl+p");
+                    }
+                },
+            );
+            let app_handle2 = app.handle();
+            let win_label2 = window.label().to_string();
+            let _ = gs.on_shortcut(
+                "Ctrl+P",
+                move |_shortcut| {
+                    if let Some(w) = app_handle2.get_webview_window(&win_label2) {
+                        let _ = w.emit("super_key_pressed", "ctrl+p");
+                    }
+                },
+            );
 
             // NOTE: Avoid registering bare "Super" key; many WMs reserve it and the plugin (muda) may not recognize it.
             // If you want a global toggle, use a combo like "CommandOrControl+Shift+P" and expose a settings toggle.

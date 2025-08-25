@@ -11,6 +11,7 @@ export default function CommandPalette({ isVisible, onClose }: CommandPalettePro
   const [q, setQ] = useState('')
   const [apps, setApps] = useState<{ name: string; exec?: string }[]>([])
   const [settings, setSettings] = useState<any | null>(null)
+  const [aiCmd, setAiCmd] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
@@ -50,7 +51,12 @@ export default function CommandPalette({ isVisible, onClose }: CommandPalettePro
       return { ...it, _key: (base + extra).trim() }
     })
 
-    return withKeys.filter((it) => it._key.includes(nq))
+    let list = withKeys.filter((it) => it._key.includes(nq))
+    if (aiCmd) {
+      const key = normalizeForSearch(`提案されたコマンドを実行: ${aiCmd}`)
+      list = [ { id: `bash:${aiCmd}`, label: `提案されたコマンドを実行: ${aiCmd}`, _key: key }, ...list ]
+    }
+    return list
   }, [q, apps])
 
   const run = async (id: string) => {
@@ -58,6 +64,14 @@ export default function CommandPalette({ isVisible, onClose }: CommandPalettePro
     if (id === 'music-play') await api.playPauseMusic()
   if (id === 'settings') { window.dispatchEvent(new Event('sis:open-settings')); onClose(); return }
   if (id === 'logs-backend') { alert('設定→ログから表示できます'); return }
+    if (id.startsWith('bash:')) {
+      const cmd = id.slice(5)
+      if (cmd.includes('sudo ')) { alert('sudoコマンドは手動で実行してください'); return }
+      const ok = confirm(`このコマンドを実行しますか？\n\n${cmd}`)
+      if (ok) { await api.runSafeCommand(cmd) }
+      onClose()
+      return
+    }
     if (id.startsWith('app:')) {
       const name = id.slice(4)
       const app = apps.find((a) => a.name === name)
@@ -98,14 +112,7 @@ export default function CommandPalette({ isVisible, onClose }: CommandPalettePro
         out = res.text || res.message || ''
       }
       const cmd = extractBash(out);
-      if (cmd) {
-        if (/\bsudo\b/.test(cmd)) {
-          alert('sudoコマンドは下部バーから実行してください');
-        } else {
-          await api.runSafeCommand(cmd);
-        }
-      }
-      onClose();
+      if (cmd) { setAiCmd(cmd) } else { alert('コマンドが見つかりませんでした') }
       return;
     }
     // 通常は最初の候補を実行
