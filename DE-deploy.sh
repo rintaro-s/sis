@@ -139,6 +139,12 @@ apply_gsettings() {
   "${cmd_prefix[@]}" set org.gnome.shell.extensions.dash-to-dock dock-fixed false || true
   "${cmd_prefix[@]}" set org.gnome.shell.extensions.dash-to-dock autohide true || true
   "${cmd_prefix[@]}" set org.gnome.shell.extensions.dash-to-dock intellihide true || true
+  # Just Perfection (入っていれば) で上部パネルの要素最小化
+  if "${cmd_prefix[@]}" list-schemas | grep -q just-perfection; then
+    "${cmd_prefix[@]}" set org.gnome.shell.extensions.just-perfection activities false || true
+    "${cmd_prefix[@]}" set org.gnome.shell.extensions.just-perfection dash false || true
+    "${cmd_prefix[@]}" set org.gnome.shell.extensions.just-perfection hot-corner false || true
+  fi
 }
 
 if [[ -n "${SUDO_USER:-}" ]]; then

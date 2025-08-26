@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::fs;
 use mime_guess;
 use tauri::Emitter;
+use tauri::Manager;
 use std::sync::atomic::{AtomicBool, Ordering};
 use cfg_if::cfg_if;
 use std::process::{Command, Stdio};
@@ -1327,6 +1328,16 @@ fn main() {
         .setup(|app| {
             // Build WM_CLASS cache on startup
             build_wmclass_cache();
+            // Prevent closing DE windows and ensure top layers
+            for lbl in ["desktop", "topbar", "dock"] {
+                if let Some(w) = app.get_window(lbl) {
+                    let _ = w.set_decorations(false);
+                    if lbl != "desktop" { let _ = w.set_always_on_top(true); }
+                    let _ = w.on_window_event(|ev| {
+                        if let tauri::WindowEvent::CloseRequested { api, .. } = ev { api.prevent_close(); }
+                    });
+                }
+            }
             // Handle first-instance CLI flags too
             let args: Vec<String> = std::env::args().collect();
             if args.iter().any(|a| a == "--toggle-terminal") {
@@ -1336,6 +1347,21 @@ fn main() {
             }
             // (Optional) Global shortcuts can be registered here if needed and supported by the compositor.
             // We intentionally skip handlers here to avoid build-time API mismatches; DE側カスタムショートカットやCLIトグルで補完します。
+            // X11 の場合はウィンドウタイプ/層ヒントを付与（ベストエフォート）
+            #[cfg(target_os = "linux")]
+            {
+                let is_x11 = std::env::var("WAYLAND_DISPLAY").is_err() && std::env::var("DISPLAY").is_ok();
+                if is_x11 && which("wmctrl") && which("xprop") {
+                    let _ = Command::new("sh").arg("-lc").arg("wmctrl -r 'SIS TopBar' -b add,sticky,above || true").status();
+                    let _ = Command::new("sh").arg("-lc").arg("xprop -name 'SIS TopBar' -f _NET_WM_WINDOW_TYPE 32a -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_DOCK || true").status();
+
+                    let _ = Command::new("sh").arg("-lc").arg("wmctrl -r 'SIS Dock' -b add,sticky,above || true").status();
+                    let _ = Command::new("sh").arg("-lc").arg("xprop -name 'SIS Dock' -f _NET_WM_WINDOW_TYPE 32a -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_DOCK || true").status();
+
+                    let _ = Command::new("sh").arg("-lc").arg("wmctrl -r 'SIS Desktop' -b add,sticky,below || true").status();
+                    let _ = Command::new("sh").arg("-lc").arg("xprop -name 'SIS Desktop' -f _NET_WM_WINDOW_TYPE 32a -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_DESKTOP || true").status();
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
