@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=SIS UI
+Exec=sis-ui
+Icon=sis-ui
+Type=Application
+Categories=Utility;
+Terminal=false
+NoDisplay=true

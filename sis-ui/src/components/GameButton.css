@@ -1,0 +1,143 @@
+/* Game-style unified button system */
+.game-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-family: var(--font-family-ui);
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: 44px;
+  text-decoration: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Primary button - main actions */
+.game-btn.primary {
+  background: linear-gradient(145deg, #6aa6e8 0%, #5a96d8 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255,255,255,0.2);
+  box-shadow: 
+    0 4px 12px rgba(106,166,232,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.3);
+}
+
+.game-btn.primary:hover {
+  background: linear-gradient(145deg, #7ab5f0 0%, #6aa6e8 100%);
+  transform: translateY(-1px);
+  box-shadow: 
+    0 6px 16px rgba(106,166,232,0.4),
+    inset 0 1px 0 rgba(255,255,255,0.4);
+}
+
+.game-btn.primary:active {
+  transform: translateY(0);
+  box-shadow: 
+    0 2px 8px rgba(106,166,232,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+/* Secondary button - secondary actions */
+.game-btn.secondary {
+  background: linear-gradient(145deg, rgba(255,255,255,0.9) 0%, rgba(248,250,252,0.8) 100%);
+  color: var(--text-primary);
+  border: 1px solid rgba(106,166,232,0.3);
+  box-shadow: 
+    0 2px 8px rgba(0,0,0,0.06),
+    inset 0 1px 0 rgba(255,255,255,0.8);
+}
+
+.game-btn.secondary:hover {
+  background: linear-gradient(145deg, rgba(255,255,255,1) 0%, rgba(248,250,252,0.9) 100%);
+  border-color: rgba(106,166,232,0.5);
+  transform: translateY(-1px);
+  box-shadow: 
+    0 4px 12px rgba(0,0,0,0.08),
+    inset 0 1px 0 rgba(255,255,255,0.9);
+}
+
+/* Accent button - special actions */
+.game-btn.accent {
+  background: linear-gradient(145deg, #ffbcd0 0%, #ffa8c0 100%);
+  color: #2d1b1f;
+  border: 1px solid rgba(255,255,255,0.3);
+  box-shadow: 
+    0 4px 12px rgba(255,188,208,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.4);
+}
+
+.game-btn.accent:hover {
+  background: linear-gradient(145deg, #ffcada 0%, #ffbcd0 100%);
+  transform: translateY(-1px);
+}
+
+/* Success/danger variants */
+.game-btn.success {
+  background: linear-gradient(145deg, #7ac772 0%, #6ab762 100%);
+  color: #ffffff;
+}
+
+.game-btn.danger {
+  background: linear-gradient(145deg, #ff9999 0%, #ff8888 100%);
+  color: #ffffff;
+}
+
+/* Size variants */
+.game-btn.small {
+  padding: 8px 12px;
+  font-size: 12px;
+  min-height: 36px;
+  border-radius: 8px;
+}
+
+.game-btn.large {
+  padding: 16px 24px;
+  font-size: 16px;
+  min-height: 52px;
+  border-radius: 16px;
+}
+
+/* Icon support */
+.game-btn-icon {
+  width: 16px;
+  height: 16px;
+  opacity: 0.9;
+}
+
+.game-btn.small .game-btn-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.game-btn.large .game-btn-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* Disabled state */
+.game-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Focus state for accessibility */
+.game-btn:focus-visible {
+  outline: 3px solid rgba(106,166,232,0.5);
+  outline-offset: 2px;
+}
+
+/* Performance mode */
+body[data-perf='low'] .game-btn {
+  transition: none;
+  transform: none !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+}

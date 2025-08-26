@@ -1,0 +1,5 @@
+export { default as IconApp } from './icon_app_default.svg'
+export { default as IconFolder } from './icon_folder.svg'
+export { default as IconTerminal } from './icon_terminal.svg'
+export { default as IconSettings } from './icon_settings.svg'
+export { default as IconDoc } from './icon_file_document.svg'

@@ -1,0 +1,154 @@
+/* FileManager: ゲーム的ファイル管理UI */
+.file-manager {
+  width: 100%;
+}
+
+.folders-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.fm-root { width: 100%; }
+
+.overview-grid { 
+  display: grid; 
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); 
+  gap: 12px; 
+}
+
+.folder-card { 
+  background: var(--bg-glass); 
+  border: 1px solid var(--border-soft); 
+  border-radius: 12px; 
+  padding: 12px; 
+  display: flex; 
+  flex-direction: column; 
+  gap: 10px; 
+}
+
+.folder-card:hover { 
+  transform: translateY(-2px); 
+  transition: transform .2s ease, box-shadow .2s ease; 
+  box-shadow: 0 8px 24px rgba(0,0,0,.16); 
+}
+
+.folder-meta { 
+  display: flex; 
+  align-items: center; 
+  justify-content: space-between; 
+}
+
+.folder-count { 
+  font-size: 12px; 
+  color: var(--text-secondary); 
+}
+
+.folder-actions { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: 8px; 
+}
+
+.action-grid { 
+  display: grid; 
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); 
+  gap: 8px; 
+}
+
+.browser-view { display: flex; flex-direction: column; gap: 10px; }
+.browser-header { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+.current-path { font-weight: 600; font-size: 13px; opacity: .85; }
+.browser-actions { display: flex; gap: 8px; }
+.browser-list { display: flex; flex-direction: column; gap: 6px; }
+.browser-status { font-size: 13px; opacity: .8; text-align: center; padding: 10px; }
+.browser-status.error { color: #dc2626; }
+.entry { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: 10px; background: var(--bg-elevated); cursor: default; }
+.entry:hover { background: var(--bg-glass); }
+.entry-name { font-weight: 500; color: var(--text-primary); }
+.entry-kind { font-size: 12px; color: var(--text-secondary); }
+
+.folder-overview-item {
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+}
+
+.folder-overview-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 8px 25px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+}
+
+.folder-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.folder-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.file-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+.quick-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.quick-actions .game-btn {
+  flex: 1;
+  min-width: 100px;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+  .folders-overview {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+  }
+  .overview-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  
+  .folder-overview-item {
+    min-height: 50px;
+    padding: 10px;
+  }
+  
+  .folder-name {
+    font-size: 13px;
+  }
+  
+  .file-count {
+    font-size: 11px;
+  }
+  
+  .quick-actions {
+    flex-direction: column;
+  }
+}
+
+/* タブレット最適化 */
+@media (hover: none) and (pointer: coarse) {
+  .folder-overview-item {
+    min-height: 56px; /* タップしやすいサイズ */
+  }
+  
+  .folder-overview-item:active {
+    transform: scale(0.95);
+  }
+}

@@ -1,0 +1,37 @@
+:root {
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+a {
+  font-weight: 500;
+  color: var(--color-secondary);
+  text-decoration: inherit;
+}
+a:hover {
+  color: var(--color-primary);
+}
+
+
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+button {
+  border-radius: 10px;
+  border: 1px solid rgba(17,24,39,0.25);
+  padding: 0.8em 1.2em;
+  font-size: 0.95em;
+  font-weight: 600;
+  font-family: inherit;
+  background: linear-gradient(180deg, #e2ecfb, #c9daf7);
+  color: #102542;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+button:hover { filter: brightness(1.03); border-color: #7fa7dd; }
+button:focus, button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+
+

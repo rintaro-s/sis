@@ -1,0 +1,186 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600&family=Inter:wght@300;400;500;600&display=swap');
+
+:root {
+  /* Ethereal Pastel UI Theme - Blue Archive inspired */
+  --color-primary: #6aa6e8; /* balanced sky blue */
+  --color-secondary: #c7b8ff; /* lavender */
+  --color-accent: #ffbcd0; /* soft pink */
+  --color-danger: #ffc9c9; /* soft coral */
+  --color-success: #c7f0c7; /* mint green */
+  --color-warning: #fff2cd; /* cream yellow */
+  
+  /* Backgrounds - luminous and translucent */
+  --bg-void: linear-gradient(135deg, #f9fbff 0%, #e8eef6 32%, #f6f9fe 100%);
+  --bg-panel: rgba(255, 255, 255, 0.95);
+  --bg-elevated: rgba(248, 250, 252, 0.9);
+  --bg-glass: rgba(255, 255, 255, 0.7);
+  --bg-glow: radial-gradient(circle, rgba(167, 199, 231, 0.1) 0%, transparent 70%);
+  
+  /* Text colors - soft and readable */
+  --text-primary: #1f2a37; /* darker for better contrast */
+  --text-secondary: #34465a;
+  --text-glow: #2563eb;
+  --text-magic: #8b5cf6;
+  --text-dim: #94a3b8;
+  
+  /* Soft glows and ethereal effects */
+  --glow-primary: 0 4px 20px rgba(167, 199, 231, 0.3);
+  --glow-secondary: 0 4px 15px rgba(230, 215, 255, 0.25);
+  --glow-accent: 0 4px 12px rgba(255, 209, 220, 0.3);
+  --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-depth: 0 8px 32px rgba(0, 0, 0, 0.08);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  
+  /* Fonts - clean and readable */
+  --font-family-main: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-family-heading: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-family-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  
+  /* Border radius - soft and rounded */
+  --border-radius-small: 8px;
+  --border-radius-medium: 12px;
+  --border-radius-large: 20px;
+  --border-radius-organic: 16px;
+  
+  /* Animations - gentle and smooth */
+  --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-bounce: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --transition-glow: all 0.4s ease-out;
+  --panel-blur: 14px;
+  --shadow-scale: 1;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family-main);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  cursor: default;
+  background: var(--bg-void);
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: 400;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Light/Dark quick theme */
+body[data-theme='light']{
+  --bg-void: linear-gradient(135deg, #ffffff 0%, #f1f5f9 40%, #ffffff 100%);
+  --bg-panel: rgba(255,255,255,0.95);
+  --bg-glass: rgba(255,255,255,0.7);
+  --text-primary: #111827;
+  --text-secondary: #374151;
+}
+body[data-theme='dark']{
+  --bg-void: linear-gradient(135deg, #0d1526 0%, #0f1930 42%, #0a1324 100%);
+  --bg-panel: rgba(17, 24, 39, 0.88);
+  --bg-glass: rgba(30, 41, 59, 0.5);
+  --text-primary: #f0f5fb;
+  --text-secondary: #d0dbea;
+}
+
+/* Reduce motion for users (or when performance constrained) */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Manual performance mode */
+body[data-perf='low'] {
+  --panel-blur: 0px;
+  --shadow-scale: 0.5;
+}
+body[data-perf='low'] * {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Accessible focus & hit target */
+button, .theme-button, .app-card, .shortcut-card, .folder-card {
+  min-height: 40px;
+}
+button:focus-visible, .theme-button:focus-visible, .app-card:focus-visible, .shortcut-card:focus-visible, .folder-card:focus-visible {
+  outline: 3px solid rgba(53,107,214,0.5);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+/* Ethereal cursors for delicate interactions */
+a, button, .clickable, .shortcut-card, .game-button { 
+  cursor: pointer; 
+  transition: var(--transition-smooth);
+}
+input[type="text"], textarea { cursor: text; }
+.resize-handle { cursor: ew-resize; }
+.loading, .busy { cursor: wait; }
+
+/* Gentle glow effects for interactivity */
+.glow-effect {
+  position: relative;
+  transition: var(--transition-glow);
+}
+.glow-effect::before {
+  content: '';
+  position: absolute;
+  top: -1px; left: -1px; right: -1px; bottom: -1px;
+  background: var(--bg-glow);
+  border-radius: inherit;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.glow-effect:hover::before {
+  opacity: 1;
+}
+
+/* Soft animations for ethereal feeling */
+@keyframes gentle-pulse {
+  0%, 100% { 
+    box-shadow: var(--glow-primary);
+    transform: scale(1);
+  }
+  50% { 
+    box-shadow: var(--glow-primary), 0 6px 25px rgba(167, 199, 231, 0.4);
+    transform: scale(1.02);
+  }
+}
+
+@keyframes float-ethereal {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50% { transform: translateY(-2px) scale(1.01); }
+}
+
+@keyframes shimmer-light {
+  0% { background-position: -100px 0; opacity: 0; }
+  50% { opacity: 1; }
+  100% { background-position: 100px 0; opacity: 0; }
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+/* Soft geometric shapes for delicate panels */
+.soft-rounded {
+  border-radius: var(--border-radius-organic);
+}
+
+.glass-panel {
+  background: var(--bg-glass);
+  /* Reduce blur to cut overdraw/GPU; avoid white-out on scroll */
+  backdrop-filter: blur(6px) saturate(140%);
+  border: 1px solid rgba(17, 24, 39, 0.18);
+}
+
+/* General styles for the app container */
+.app { 
+  display: flex; 
+  flex-direction: column; 
+  min-height: 100vh; 
+  position: relative;
+}

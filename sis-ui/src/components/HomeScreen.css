@@ -1,0 +1,643 @@
+.futuristic-home {
+  min-height: 100%;
+  padding: 20px;
+  overflow-y: auto;
+  position: relative;
+  background: transparent;
+}
+
+/* 壁紙は App.css の .main-content で適用するため削除 */
+
+/* ウェルカムセクション */
+.welcome-section {
+  margin-bottom: 30px;
+}
+
+.welcome-card {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.1) 0%, 
+    rgba(255, 255, 255, 0.05) 100%);
+  backdrop-filter: blur(8px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  padding: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.welcome-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, 
+    transparent 0%, 
+    #0096ff 25%, 
+    #00d4ff 50%, 
+    #0096ff 75%, 
+    transparent 100%);
+  animation: welcome-border 3s infinite ease-in-out;
+}
+
+@keyframes welcome-border {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.welcome-content {
+  flex: 1;
+}
+
+.welcome-title {
+  margin: 0 0 10px 0;
+}
+
+.title-main {
+  display: block;
+  font-size: 32px;
+  font-weight: 900;
+  color: var(--text-primary);
+  /* ライト/ダークで適切に見えるグラデーションに調整 */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  background: linear-gradient(45deg, rgba(255,255,255,0.96), rgba(180,210,255,0.92));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 4px;
+}
+
+/* ライトテーマではテキストシャドウを弱める（白のにじみ防止） */
+.light-theme .title-main {
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+}
+
+.title-sub {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 1px;
+  opacity: 0.9;
+}
+
+.welcome-time {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 500;
+  margin-top: 8px;
+}
+
+.welcome-visual {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hologram-circle {
+  width: 80px;
+  height: 80px;
+  border: 2px solid rgba(0, 150, 255, 0.6);
+  border-radius: 50%;
+  background: radial-gradient(circle, 
+    rgba(0, 150, 255, 0.1) 0%, 
+    transparent 70%);
+  animation: hologram-spin 8s linear infinite;
+  position: relative;
+}
+
+@keyframes hologram-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.hologram-circle::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  background: #00d4ff;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.8);
+  animation: pulse-core 2s infinite ease-in-out;
+}
+
+@keyframes pulse-core {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -50%) scale(1.5); }
+}
+
+.data-streams {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.stream {
+  position: absolute;
+  width: 2px;
+  height: 20px;
+  background: linear-gradient(180deg, 
+    transparent 0%, 
+    rgba(0, 212, 255, 0.8) 50%, 
+    transparent 100%);
+  animation: stream-flow 3s infinite ease-in-out;
+}
+
+.stream:nth-child(1) {
+  top: 10px;
+  left: 20px;
+  animation-delay: 0s;
+}
+
+.stream:nth-child(2) {
+  top: 30px;
+  right: 15px;
+  animation-delay: 1s;
+}
+
+.stream:nth-child(3) {
+  bottom: 20px;
+  left: 50%;
+  animation-delay: 2s;
+}
+
+@keyframes stream-flow {
+  0%, 100% { opacity: 0.3; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-10px); }
+}
+
+/* ダッシュボードグリッド */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.dashboard-card {
+  background: var(--panel-bg);
+  backdrop-filter: blur(6px) saturate(1.3);
+  border: 1px solid var(--panel-border);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+/* デスクトップ：グリッド表示 */
+.files-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 12px;
+  padding: 8px 10px 14px;
+}
+
+.file-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 8px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  transition: transform .15s ease, background .2s ease, box-shadow .2s ease;
+}
+
+.file-card:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+}
+
+.file-thumb {
+  width: 84px;
+  height: 62px;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+}
+
+.file-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.file-glyph {
+  font-size: 28px;
+  opacity: 0.85;
+}
+
+.file-label {
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--text-primary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.dashboard-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 
+    0 12px 40px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 0 0 1px rgba(0, 150, 255, 0.3);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.card-icon {
+  font-size: 20px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.card-badge {
+  background: linear-gradient(135deg, #0096ff, #00d4ff);
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 12px;
+  min-width: 24px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 150, 255, 0.4);
+}
+
+/* アプリグリッド */
+.apps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 12px;
+}
+
+.app-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  animation: app-entrance 0.6s ease-out;
+}
+
+@keyframes app-entrance {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.app-item:hover {
+  background: rgba(0,0,0,0.06);
+  transform: translateY(-4px) scale(1.05);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+.app-icon-wrapper {
+  position: relative;
+  width: 40px;
+  height: 40px;
+}
+
+.app-icon {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  object-fit: cover;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.app-glow {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(135deg, #0096ff, #00d4ff);
+  border-radius: 10px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: -1;
+  filter: blur(4px);
+}
+
+.app-item:hover .app-glow {
+  opacity: 0.6;
+}
+
+.app-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* ファイルリスト */
+.files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  animation: file-entrance 0.4s ease-out;
+}
+
+@keyframes file-entrance {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.file-item:hover {
+  background: rgba(0,0,0,0.06);
+  transform: translateX(4px);
+}
+
+.file-icon {
+  font-size: 16px;
+  opacity: 0.8;
+}
+
+.file-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.file-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-path {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-action {
+  font-size: 12px;
+  color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.file-item:hover .file-action {
+  opacity: 1;
+}
+
+/* システムメトリクス */
+.system-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.metric {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.metric-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 80px;
+}
+
+.metric-bar {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.metric-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.8s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.metric-fill.cpu {
+  background: linear-gradient(90deg, #00ff88, #ffaa00);
+  box-shadow: 0 0 8px rgba(0, 255, 136, 0.4);
+}
+
+.metric-fill.memory {
+  background: linear-gradient(90deg, #0096ff, #00d4ff);
+  box-shadow: 0 0 8px rgba(0, 150, 255, 0.4);
+}
+
+.metric-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.4), 
+    transparent);
+  animation: metric-shimmer 2s infinite ease-in-out;
+}
+
+@keyframes metric-shimmer {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+.metric-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 40px;
+  text-align: right;
+}
+
+.status-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #00ff88;
+  box-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
+  animation: status-pulse 2s infinite;
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* アクショングリッド */
+.actions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+  font-weight: 600;
+}
+
+.action-btn.primary {
+  background: linear-gradient(135deg, #0096ff, #00d4ff);
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(0, 150, 255, 0.3);
+}
+
+.action-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.action-btn.primary:hover {
+  background: linear-gradient(135deg, #0080e6, #00c4f0);
+  box-shadow: 0 6px 20px rgba(0, 150, 255, 0.4);
+}
+
+.action-icon {
+  font-size: 20px;
+}
+
+.action-text {
+  font-size: 12px;
+  text-align: center;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+  .futuristic-home {
+    padding: 16px;
+  }
+  
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .welcome-card {
+    padding: 20px;
+    flex-direction: column;
+    text-align: center;
+    gap: 20px;
+  }
+  
+  .title-main {
+    font-size: 24px;
+  }
+  
+  .welcome-visual {
+    width: 80px;
+    height: 80px;
+  }
+  
+  .hologram-circle {
+    width: 60px;
+    height: 60px;
+  }
+  
+  .apps-grid {
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  }
+  
+  .actions-grid {
+    grid-template-columns: 1fr;
+  }
+}

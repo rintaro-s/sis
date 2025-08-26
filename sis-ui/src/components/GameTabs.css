@@ -1,0 +1,114 @@
+/* Game-style tab system */
+.game-tabs {
+  display: flex;
+  background: rgba(255,255,255,0.6);
+  border: 1px solid rgba(106,166,232,0.2);
+  border-radius: 12px;
+  padding: 4px;
+  gap: 2px;
+  backdrop-filter: blur(8px);
+}
+
+.game-tab {
+  flex: 1;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-family: var(--font-family-ui);
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.game-tab:hover {
+  color: var(--text-primary);
+  background: rgba(255,255,255,0.5);
+}
+
+.game-tab.active {
+  background: linear-gradient(145deg, rgba(106,166,232,0.15) 0%, rgba(255,255,255,0.9) 100%);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: 
+    0 2px 8px rgba(106,166,232,0.15),
+    inset 0 1px 0 rgba(255,255,255,0.8);
+  border: 1px solid rgba(106,166,232,0.3);
+}
+
+.game-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 2px;
+  background: var(--color-primary);
+  border-radius: 1px;
+}
+
+/* Vertical tabs */
+.game-tabs.vertical {
+  flex-direction: column;
+  width: 200px;
+}
+
+.game-tabs.vertical .game-tab {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.game-tabs.vertical .game-tab.active::after {
+  bottom: auto;
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 24px;
+}
+
+/* Badge support */
+.game-tab-badge {
+  background: var(--color-accent);
+  color: #2d1b1f;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 6px;
+  min-width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Icon support */
+.game-tab-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  opacity: 0.8;
+}
+
+.game-tab.active .game-tab-icon {
+  opacity: 1;
+}
+
+/* Performance mode */
+body[data-perf='low'] .game-tab {
+  transition: none;
+  backdrop-filter: none;
+}
+
+body[data-perf='low'] .game-tabs {
+  backdrop-filter: none;
+}

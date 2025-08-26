@@ -1,0 +1,49 @@
+Package libwebkit2gtk-4.0-37 has no installation candidate
+
+Installation successful:libgtk-3-0 libwebkit2gtk-4.1-0
+
+---
+[2025-08-16 21:49:02] Received log:
+
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+
+Reading package lists...
+Building dependency tree...
+Reading state information...
+The following packages were automatically installed and are no longer required:
+  libgit2-1.7 libgl1-amber-dri libglapi-mesa libhttp-parser2.9 libllvm17t64
+  libssh2-1t64 libstd-rust-1.75 libstd-rust-dev
+Use 'sudo apt autoremove' to remove them.
+The following NEW packages will be installed:
+  sis-ui
+0 upgraded, 1 newly installed, 0 to remove and 88 not upgraded.
+Need to get 0 B/2,319 kB of archives.
+After this operation, 0 B of additional disk space will be used.
+Get:1 /home/rinta/sis/build/sis-ui_0.1.0_amd64.deb sis-ui amd64 0.1.0 [2,319 kB]
+Selecting previously unselected package sis-ui.
+(Reading database ... 175130 files and directories currently installed.)
+Preparing to unpack .../build/sis-ui_0.1.0_amd64.deb ...
+Unpacking sis-ui (0.1.0) ...
+Setting up sis-ui (0.1.0) ...
+Processing triggers for desktop-file-utils (0.27-2build1) ...
+Processing triggers for hicolor-icon-theme (0.17-2) ...
+Processing triggers for gnome-menus (3.36.0-1.1ubuntu3) ...
+Processing triggers for bamfdaemon (0.5.6+22.04.20220217-0ubuntu5) ...
+Rebuilding /usr/share/applications/bamf-2.index...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+
+---
+[2025-08-16 21:48:53] Received log:
+
+thread 'main' panicked at /home/rinta/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tao-0.34.0/src/platform_impl/linux/event_loop.rs:218:53:
+Failed to initialize gtk backend!: BoolError { message: "Failed to initialize GTK", filename: "/home/rinta/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gtk-0.18.2/src/rt.rs", function: "gtk::rt::init", line: 141 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
