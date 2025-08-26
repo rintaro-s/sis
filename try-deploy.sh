@@ -144,23 +144,23 @@ Priority: optional
 Architecture: $ARCH
 Maintainer: $MAINTAINER
 Description: $DESCRIPTION
-Depends: libc6 (>= 2.31), libgtk-3-0, libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37, xfwm4, picom, python3, python3-pip, python3-psutil, alsa-utils, brightnessctl, network-manager, bluez, playerctl, gnome-screenshot, xdg-utils
+Depends: libc6 (>= 2.31), libgtk-3-0, libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37, xdg-utils
 EOF
 
-# postinst: ensure autostart entry
+# postinst: ensure autostart entry for SISUI desktop session
 	cat > "$PKG_DIR/DEBIAN/postinst" <<'EOF'
 #!/bin/sh
 set -e
-# Create Xfce autostart entry
+# Create SISUI autostart entry (visible only in SIS UI desktop session)
 install -d -m 0755 /etc/xdg/autostart
 cat > /etc/xdg/autostart/sis-ui.desktop <<EOT
 [Desktop Entry]
 Type=Application
-Name=SIS UI (Autostart)
+Name=SIS UI
 Exec=/usr/bin/sis-ui
 Icon=sis-ui
 X-GNOME-Autostart-enabled=true
-OnlyShowIn=XFCE;
+OnlyShowIn=SISUI;
 NoDisplay=false
 EOT
 exit 0

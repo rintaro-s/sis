@@ -6,8 +6,7 @@ use std::time::Instant;
 use std::path::{Path, PathBuf};
 use std::fs;
 use mime_guess;
-use tauri::Manager;
-use tauri_plugin_global_shortcut::GlobalShortcutExt;
+use tauri::Emitter;
 use std::sync::atomic::{AtomicBool, Ordering};
 use cfg_if::cfg_if;
 use std::process::{Command, Stdio};
@@ -1317,49 +1316,26 @@ fn main() {
         .manage(system)
         .manage(network_stats)
     .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            // When a second instance is launched with flags, route to running instance
+            let has_toggle_palette = argv.iter().any(|a| a == "--toggle-palette");
+            let has_toggle_terminal = argv.iter().any(|a| a == "--toggle-terminal");
+            if has_toggle_terminal { let _ = app.emit("sis:toggle-builtin-terminal", "toggle"); }
+            else if has_toggle_palette { let _ = app.emit("super_key_pressed", "toggle"); }
+            else { let _ = app.emit("super_key_pressed", "toggle"); }
+        }))
         .setup(|app| {
             // Build WM_CLASS cache on startup
             build_wmclass_cache();
-            
-            // get window (webview) in a Tauri-compatible way
-            // Prefer get_webview_window (returns Option<Window>), fallback to AppHandle.get_window if present
-            let window = app.get_webview_window("main").or_else(|| {
-                // attempt to get via handle (use get_webview_window for AppHandle compatibility)
-                app.handle().get_webview_window("main")
-            });
-            let window = window.expect("main window not found");
-
-            // Register a global shortcut for Command/Ctrl+P to toggle command palette.
-            // Note: On Wayland, global shortcuts may be restricted by the compositor; this works best on Xorg.
-            let gs = app.handle().global_shortcut();
-            let app_handle = app.handle();
-            let _ = gs.register("CommandOrControl+P");
-            let _ = gs.register("Ctrl+P");
-            let win_label = window.label().to_string();
-            let _ = gs.on_shortcut(
-                "CommandOrControl+P",
-                move |_shortcut| {
-                    if let Some(w) = app_handle.get_webview_window(&win_label) {
-                        let _ = w.emit("super_key_pressed", "ctrl+p");
-                    }
-                },
-            );
-            let app_handle2 = app.handle();
-            let win_label2 = window.label().to_string();
-            let _ = gs.on_shortcut(
-                "Ctrl+P",
-                move |_shortcut| {
-                    if let Some(w) = app_handle2.get_webview_window(&win_label2) {
-                        let _ = w.emit("super_key_pressed", "ctrl+p");
-                    }
-                },
-            );
-
-            // NOTE: Avoid registering bare "Super" key; many WMs reserve it and the plugin (muda) may not recognize it.
-            // If you want a global toggle, use a combo like "CommandOrControl+Shift+P" and expose a settings toggle.
-            // Example (disabled):
-            // let gs = app.handle().global_shortcut();
-            // let _ = gs.register("CommandOrControl+Shift+P");
+            // Handle first-instance CLI flags too
+            let args: Vec<String> = std::env::args().collect();
+            if args.iter().any(|a| a == "--toggle-terminal") {
+                let _ = app.emit("sis:toggle-builtin-terminal", "toggle");
+            } else if args.iter().any(|a| a == "--toggle-palette") {
+                let _ = app.emit("super_key_pressed", "toggle");
+            }
+            // (Optional) Global shortcuts can be registered here if needed and supported by the compositor.
+            // We intentionally skip handlers here to avoid build-time API mismatches; DE側カスタムショートカットやCLIトグルで補完します。
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1605,14 +1581,24 @@ fn run_safe_command(cmdline: String) -> Result<String, String> {
     log_append("INFO", &format!("run_safe_command: {}", trimmed));
     match Command::new("sh").arg("-c").arg(trimmed).output() {
         Ok(o) => {
-            if o.status.success() {
-                let out = String::from_utf8_lossy(&o.stdout).to_string();
-                log_append("INFO", &format!("run_safe_command ok bytes={}", out.len()));
-                Ok(out)
+            let code = o.status.code().unwrap_or(-1);
+            let stdout_s = String::from_utf8_lossy(&o.stdout).to_string();
+            let stderr_s = String::from_utf8_lossy(&o.stderr).to_string();
+            let combined = if stdout_s.is_empty() {
+                stderr_s.clone()
+            } else if stderr_s.is_empty() {
+                stdout_s.clone()
             } else {
-                let err = String::from_utf8_lossy(&o.stderr).to_string();
-                log_append("ERROR", &format!("run_safe_command failed: {}", err));
-                Err(err)
+                format!("{}\n{}", stdout_s, stderr_s)
+            };
+            if o.status.success() {
+                let with_exit = if combined.trim().is_empty() { format!("[exit {}]", code) } else { format!("{}\n[exit {}]", combined, code) };
+                log_append("INFO", &format!("run_safe_command ok exit={} bytes={}", code, with_exit.len()));
+                Ok(with_exit)
+            } else {
+                let with_exit = if combined.trim().is_empty() { format!("[exit {}]", code) } else { format!("{}\n[exit {}]", combined, code) };
+                log_append("ERROR", &format!("run_safe_command failed exit={} bytes={}", code, with_exit.len()));
+                Err(with_exit)
             }
         }
         Err(e) => { log_append("ERROR", &format!("run_safe_command spawn error: {}", e)); Err(format!("failed-to-run: {}", e)) }

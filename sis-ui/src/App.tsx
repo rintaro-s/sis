@@ -5,6 +5,7 @@ import BottomBar from './components/BottomBar';
 import HomeScreen from './components/HomeScreen';
 import Sidebar from './components/Sidebar';
 import CommandPalette from './components/CommandPalette';
+import SimpleTerminal from './components/SimpleTerminal';
 import './App.css';
 import { api } from './services/api';
 import Settings from './components/Settings';
@@ -16,6 +17,9 @@ function App() {
   const [backendError, setBackendError] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); // サイドバーの状態
   const [ccOpen, setCcOpen] = useState(false);
+  const [termOpen, setTermOpen] = useState(false);
+  const [termCmd, setTermCmd] = useState<string | undefined>(undefined);
+  const [termAutoRun, setTermAutoRun] = useState<boolean>(false);
 
   useEffect(() => {
     const unlisten = listen('super_key_pressed', async () => {
@@ -39,6 +43,11 @@ function App() {
         e.preventDefault();
         setSettingsOpen(true);
       }
+  // Ctrl+Shift+7（日本語配列向け）で内蔵ターミナルをトグル
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === '7')) {
+        e.preventDefault();
+        setTermOpen(p=>!p)
+      }
       if (e.code === 'Escape') {
         setIsMenuVisible(false);
         setSettingsOpen(false);
@@ -46,8 +55,12 @@ function App() {
       }
     };
   window.addEventListener('keydown', onKey);
-    const openSettings = () => setSettingsOpen(true);
+  const openSettings = () => setSettingsOpen(true);
+  const openBuiltinTerm = (e:any) => { setTermCmd(e?.detail?.cmd); setTermAutoRun(!!e?.detail?.autoRun); setTermOpen(true) }
     window.addEventListener('sis:open-settings', openSettings as any);
+  window.addEventListener('sis:open-builtin-terminal', openBuiltinTerm as any)
+  const toggleBuiltin = () => setTermOpen(p=>!p)
+  window.addEventListener('sis:toggle-builtin-terminal', toggleBuiltin as any)
   const toggleCc = () => setCcOpen(p=>!p)
   window.addEventListener('sis:toggle-cc', toggleCc as any)
 
@@ -55,6 +68,8 @@ function App() {
       unlisten.then((f: () => void) => f());
   window.removeEventListener('keydown', onKey);
   window.removeEventListener('sis:open-settings', openSettings as any);
+  window.removeEventListener('sis:open-builtin-terminal', openBuiltinTerm as any)
+  window.removeEventListener('sis:toggle-builtin-terminal', toggleBuiltin as any)
   window.removeEventListener('sis:toggle-cc', toggleCc as any);
     };
   }, []);
@@ -124,6 +139,8 @@ function App() {
   <MiniControlCenter open={ccOpen} onClose={()=>setCcOpen(false)} />
       
       <CommandPalette isVisible={isMenuVisible} onClose={() => setIsMenuVisible(false)} />
+
+  <SimpleTerminal open={termOpen} initialCmd={termCmd} initialAutoRun={termAutoRun} onClose={()=>{ setTermOpen(false); setTermAutoRun(false); }} />
 
       {settingsOpen && (
         <div className="modal-overlay">

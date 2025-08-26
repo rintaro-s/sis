@@ -5,4 +5,4 @@ Priority: optional
 Architecture: amd64
 Maintainer: Your Name <your-email@example.com>
 Description: A light, modern, game-inspired desktop UI powered by Tauri.
-Depends: libc6 (>= 2.31), libgtk-3-0, libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37, xfwm4, picom, python3, python3-pip, python3-psutil, alsa-utils, brightnessctl, network-manager, bluez, playerctl, gnome-screenshot, xdg-utils
+Depends: libc6 (>= 2.31), libgtk-3-0, libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37, xdg-utils
