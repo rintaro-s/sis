@@ -19,6 +19,37 @@ export default function CommandPalette({ isVisible, onClose }: CommandPalettePro
   const [sseInfo, setSseInfo] = useState<{ mode: 'sse' | 'plain' | null; chunks: number }>({ mode: null, chunks: 0 })
   const abortRef = useRef<AbortController | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const [lmUrl, setLmUrl] = useState('')
+  const [lmModel, setLmModel] = useState('')
+  const [lmKey, setLmKey] = useState('')
+  const [lmAutostart, setLmAutostart] = useState(false)
+
+  async function preloadLm() {
+    try {
+      const s = await api.getSettings().catch(()=>({})) as any
+      setLmUrl(s?.llm_remote_url || 'http://localhost:1234/v1/chat/completions')
+      setLmModel(s?.llm_model || '')
+      setLmKey(s?.llm_api_key || '')
+      setLmAutostart(!!s?.llm_autostart_localhost)
+    } catch {
+      setLmUrl('http://localhost:1234/v1/chat/completions')
+      setLmModel('')
+      setLmKey('')
+      setLmAutostart(false)
+    }
+  }
+
+  async function saveLmSettings() {
+    try {
+      const prev = await api.getSettings().catch(()=>({})) as any
+      const next = { ...prev, llm_mode: 'lmstudio', llm_remote_url: lmUrl, llm_model: lmModel, llm_api_key: lmKey, llm_autostart_localhost: lmAutostart }
+      await api.setSettings(next)
+      try { await api.emitGlobalEvent('sis:settings-saved', next) } catch {}
+      alert('LM Studio 設定を保存しました')
+    } catch {
+      alert('保存に失敗しました')
+    }
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -67,8 +98,7 @@ export default function CommandPalette({ isVisible, onClose }: CommandPalettePro
       { id: 'launcher', label: 'アプリランチャーを開く (Alt+Space)' },
       { id: 'screenshot', label: 'スクリーンショットを撮る' },
       { id: 'music-play', label: '音楽 再生/一時停止' },
-      { id: 'settings', label: '設定を開く' },
-      { id: 'logs-backend', label: 'バックログ（設定→ログ）' },
+      { id: 'logs-backend', label: 'バックログを表示' },
     ]
     const appItems = apps
       .filter((a) => a.exec && a.exec.trim() !== '')
@@ -88,16 +118,20 @@ export default function CommandPalette({ isVisible, onClose }: CommandPalettePro
     let list = withKeys.filter((it) => it._key.includes(nq))
     // @でAIサジェストを表示
     if (q.trim().startsWith('@')) {
-      list = [ { id: 'ai-chat', label: 'AIとチャット…', _key: 'ai chat あい ちゃっと' }, ...list ]
+      list = [ 
+        { id: 'ai-chat', label: 'AIとチャット…', _key: 'ai chat あい ちゃっと' },
+        { id: 'lm-settings', label: 'LM Studio 設定を開く (@)', _key: 'lm studio settings せってい' },
+        ...list 
+      ]
     }
     return list
   }, [q, apps])
 
   const run = async (id: string) => {
-    if (id === 'screenshot') await api.takeScreenshot()
-    if (id === 'music-play') await api.playPauseMusic()
-  if (id === 'settings') { window.dispatchEvent(new Event('sis:open-settings')); onClose(); return }
-  if (id === 'logs-backend') { alert('設定→ログから表示できます'); return }
+  if (id === 'screenshot') await api.takeScreenshot()
+  if (id === 'music-play') await api.playPauseMusic()
+  if (id === 'logs-backend') { const text = await api.getBackendLog(200); alert(text || '(空)'); return }
+  if (id === 'lm-settings') { setQ('@settings'); await preloadLm(); return }
     if (id.startsWith('bash:')) {
       const cmd = id.slice(5)
       if (cmd.includes('sudo ')) { alert('sudoコマンドは手動で実行してください'); return }
@@ -312,6 +346,31 @@ export default function CommandPalette({ isVisible, onClose }: CommandPalettePro
           onKeyDown={(e)=>{ if (e.key==='Enter') onEnter() }}
         />
         <div className="palette-body">
+          {q.trim().startsWith('@') && q.trim() === '@settings' && (
+            <div className="ai-block">
+              <div className="ai-commands-title">LM Studio 設定</div>
+              <div className="setting-group">
+                <label className="setting-label">サーバーURL</label>
+                <input className="game-input" type="text" value={lmUrl} onChange={(e)=>setLmUrl(e.target.value)} placeholder="http://localhost:1234/v1/chat/completions" />
+              </div>
+              <div className="setting-group">
+                <label className="setting-label">モデル</label>
+                <input className="game-input" type="text" value={lmModel} onChange={(e)=>setLmModel(e.target.value)} placeholder="lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF" />
+              </div>
+              <div className="setting-group">
+                <label className="setting-label">APIキー（任意）</label>
+                <input className="game-input" type="password" value={lmKey} onChange={(e)=>setLmKey(e.target.value)} />
+              </div>
+              <div className="setting-group" style={{display:'flex',alignItems:'center',gap:8}}>
+                <label className="setting-label">localhostなら自動起動</label>
+                <button className={`game-btn ${lmAutostart?'primary':'secondary'}`} onClick={()=>setLmAutostart(v=>!v)}>{lmAutostart?'有効':'無効'}</button>
+              </div>
+              <div style={{display:'flex',gap:8}}>
+                <button className="game-btn primary" onClick={saveLmSettings}>保存</button>
+                <button className="game-btn secondary" onClick={preloadLm}>再読込</button>
+              </div>
+            </div>
+          )}
           {loading && (
             <div className="palette-loading">
               <div className="spinner" aria-label="Loading" />

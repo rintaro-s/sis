@@ -1709,8 +1709,7 @@ fn main() {
                                                             let _ = Command::new("sh").arg("-lc").arg("xprop -name 'SIS Dock' -f _NET_WM_STATE 32a -set _NET_WM_STATE '_NET_WM_STATE_ABOVE, _NET_WM_STATE_SKIP_TASKBAR, _NET_WM_STATE_SKIP_PAGER' || true").status();
                                                             let _ = Command::new("sh").arg("-lc").arg("wmctrl -r 'SIS Sidebar' -b add,skip_taskbar,skip_pager,above || true").status();
                                                             let _ = Command::new("sh").arg("-lc").arg("xprop -name 'SIS Sidebar' -f _NET_WM_STATE 32a -set _NET_WM_STATE '_NET_WM_STATE_ABOVE, _NET_WM_STATE_SKIP_TASKBAR, _NET_WM_STATE_SKIP_PAGER' || true").status();
-                                                            let _ = Command::new("sh").arg("-lc").arg("wmctrl -r 'SIS Settings' -b add,skip_taskbar,skip_pager,above || true").status();
-                                                            let _ = Command::new("sh").arg("-lc").arg("xprop -name 'SIS Settings' -f _NET_WM_STATE 32a -set _NET_WM_STATE '_NET_WM_STATE_ABOVE, _NET_WM_STATE_SKIP_TASKBAR, _NET_WM_STATE_SKIP_PAGER' || true").status();
+                                                            // Settings window is deprecated; no-op
                                                             std::thread::sleep(std::time::Duration::from_millis(1000));
                                                         }
                                                     });
@@ -1854,35 +1853,9 @@ fn main() {
 }
 
 #[tauri::command]
-fn open_settings_window(app_handle: tauri::AppHandle) -> Result<String, String> {
-    use tauri::{WebviewUrl, WebviewWindowBuilder};
-    let label = "settings";
-    if app_handle.get_webview_window(label).is_none() {
-        let url = WebviewUrl::App("/".into());
-        let _ = WebviewWindowBuilder::new(&app_handle, label, url)
-            .title("SIS Settings")
-            .decorations(true)
-            .resizable(true)
-            .skip_taskbar(true)
-            .inner_size(980.0, 720.0)
-            .build();
-    }
-    if let Some(w) = app_handle.get_webview_window(label) {
-        let _ = w.set_title("SIS Settings");
-        let _ = w.set_resizable(true);
-        let _ = w.show();
-    }
-    // X11: 上に出し、Dock/Taskbar/Pagerからは非表示
-    let is_x11 = std::env::var("WAYLAND_DISPLAY").is_err() && std::env::var("DISPLAY").is_ok();
-    if is_x11 && which("wmctrl") && which("xprop") {
-        let _ = Command::new("sh").arg("-lc").arg(
-            "wmctrl -r 'SIS Settings' -b add,above,skip_taskbar,skip_pager || true"
-        ).status();
-        let _ = Command::new("sh").arg("-lc").arg(
-            "xprop -name 'SIS Settings' -f _NET_WM_STATE 32a -set _NET_WM_STATE '_NET_WM_STATE_ABOVE, _NET_WM_STATE_SKIP_TASKBAR, _NET_WM_STATE_SKIP_PAGER' || true"
-        ).status();
-    }
-    Ok("settings-shown".into())
+fn open_settings_window(_app_handle: tauri::AppHandle) -> Result<String, String> {
+    // Deprecated: Settings window has been removed. Keep the command for backward compatibility.
+    Err("settings-window-removed".into())
 }
 
 #[tauri::command]
@@ -2488,6 +2461,7 @@ fn get_settings() -> Result<DeSettings, String> { Ok(read_settings()) }
 
 #[tauri::command]
 fn set_settings(app_handle: tauri::AppHandle, new_s: DeSettings) -> Result<String, String> {
+    log_append("INFO", &format!("set_settings called with theme: {:?}, wallpaper: {:?}", new_s.theme, new_s.wallpaper));
     // Merge with existing settings to avoid dropping fields
     let mut cur = read_settings();
     // Primitive merge: prefer incoming if Some/true; keep existing otherwise
@@ -2508,9 +2482,11 @@ fn set_settings(app_handle: tauri::AppHandle, new_s: DeSettings) -> Result<Strin
     // 改訂番号をインクリメント
     let next_rev = cur.rev.unwrap_or(0).saturating_add(1);
     cur.rev = Some(next_rev);
+    log_append("INFO", &format!("set_settings writing rev: {}", next_rev));
     write_settings(&cur);
     // 通知: すべてのWebviewへ保存済み設定をブロードキャスト
     let _ = app_handle.emit("sis:settings-saved", &cur);
+    log_append("INFO", "set_settings emitted sis:settings-saved");
     // Optional: auto-start LM Studio if localhost specified
     if cur.llm_autostart_localhost {
         if let Some(url) = &cur.llm_remote_url {

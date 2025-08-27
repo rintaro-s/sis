@@ -11,7 +11,7 @@ die() { echo -e "[deploy][ERROR] $*" >&2; exit 1; }
 # --- Configuration ---
 APP_ID="sis-ui"
 APP_NAME="SIS UI"
-VERSION="0.1.0"
+VERSION="0.1.2"
 ARCH="${ARCH:-}"
 if [[ -z "$ARCH" ]]; then
 	ARCH=$(dpkg --print-architecture 2>/dev/null || echo amd64)
@@ -199,13 +199,43 @@ if [[ $APT_RC -ne 0 ]]; then
 	[[ $APT_RC -ne 0 ]] && die "Failed to install $DEB_PATH (code $APT_RC)."
 fi
 
-# Post-install sanity: ensure wrapper exists
-if [[ ! -x "/usr/bin/$APP_ID" ]]; then
-	log "/usr/bin/$APP_ID not found; creating wrapper to /opt/$APP_ID/$APP_ID"
-	$SUDO install -m 0755 /dev/stdin "/usr/bin/$APP_ID" <<EOF
+# Post-install sanity: ensure wrapper exists and points to the correct binary
+WRAPPER="/usr/bin/$APP_ID"
+TARGET_APP="/usr/bin/app"
+TARGET_OPT="/opt/$APP_ID/$APP_ID"
+
+# Decide target: prefer Tauri-installed /usr/bin/app; fallback to legacy /opt binary
+if [[ -x "$TARGET_APP" ]]; then
+	TARGET="$TARGET_APP"
+elif [[ -x "$TARGET_OPT" ]]; then
+	TARGET="$TARGET_OPT"
+else
+	TARGET=""
+fi
+
+create_wrapper() {
+	local target="$1"
+	[[ -z "$target" ]] && return 1
+	log "Creating wrapper $WRAPPER -> $target"
+	$SUDO install -m 0755 /dev/stdin "$WRAPPER" <<EOF
 #!/usr/bin/env bash
-exec /opt/$APP_ID/$APP_ID "${1:+$@}"
+exec $target "\$@"
 EOF
+}
+
+if [[ ! -x "$WRAPPER" ]]; then
+	# Wrapper missing: create one to the decided target
+	if [[ -n "$TARGET" ]]; then
+		create_wrapper "$TARGET"
+	else
+		log "No target binary found for wrapper (missing $TARGET_APP and $TARGET_OPT). Skipping."
+	fi
+else
+	# Wrapper exists: if it points to /opt but /usr/bin/app exists, fix it
+	if grep -q "/opt/$APP_ID/$APP_ID" "$WRAPPER" 2>/dev/null && [[ -x "$TARGET_APP" ]]; then
+		log "Fixing existing wrapper to point to $TARGET_APP instead of /opt."
+		create_wrapper "$TARGET_APP"
+	fi
 fi
 
 # Harden desktop entries: hide from app grid/dock even if tauri bundler installed its own

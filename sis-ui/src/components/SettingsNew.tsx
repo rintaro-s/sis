@@ -150,7 +150,7 @@ function Settings() {
               {isDirty && (
                 <>
                   <button className="game-btn primary" onClick={saveAndExit}>
-                    💾 保存して終了
+                    💾 保存
                   </button>
                   <button className="game-btn secondary" onClick={discardAndExit}>
                     ❌ 変更を破棄

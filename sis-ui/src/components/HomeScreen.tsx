@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type AppInfo } from '../services/api';
 import './HomeScreen.css';
+import './Settings.css';
 
 function HomeScreen() {
   const [apps, setApps] = useState<AppInfo[]>([]);
@@ -8,6 +9,8 @@ function HomeScreen() {
   const [desktopFiles, setDesktopFiles] = useState<{ name: string; path: string; is_dir?: boolean }[]>([]);
   const [thumbs, setThumbs] = useState<Record<string, string>>({})
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [theme, setTheme] = useState<'system'|'light'|'dark'>('system')
+  const [wallpaper, setWallpaper] = useState<string>('')
 
   useEffect(() => {
     let mounted = true;
@@ -69,6 +72,20 @@ function HomeScreen() {
     };
   }, []);
 
+  // 初期設定読み込み（テーマ/外観/壁紙）
+  useEffect(() => {
+    let mounted = true
+    ;(async()=>{
+      try {
+        const s = await api.getSettings().catch(()=>({})) as any
+        if (!mounted) return
+        if (s?.theme) setTheme(s.theme)
+        if (typeof s?.wallpaper === 'string') setWallpaper(s.wallpaper)
+      } catch {}
+    })()
+    return ()=>{ mounted = false }
+  }, [])
+
   // デスクトップ画像のサムネを data URL 化して読み込み安定性を向上
   useEffect(() => {
     let cancelled = false
@@ -83,6 +100,9 @@ function HomeScreen() {
           const url = await api.fileToDataUrl(f.path)
           if (url && url.startsWith('data:')) {
             entries.push([f.path, url])
+            console.log('Generated thumb for', f.path, url.slice(0, 50) + '...')
+          } else {
+            console.warn('Invalid data URL for', f.path, url)
           }
         } catch (err) {
           console.warn('Failed to load preview for', f.path, err)
@@ -90,12 +110,16 @@ function HomeScreen() {
           try {
             const core = await import('@tauri-apps/api/core')
             const url = core.convertFileSrc(f.path)
-            if (url) entries.push([f.path, url])
+            if (url) {
+              entries.push([f.path, url])
+              console.log('Fallback thumb for', f.path, url)
+            }
             continue
           } catch {}
           try {
             const fileUrl = f.path.startsWith('file://') ? f.path : `file://${f.path}`
             entries.push([f.path, fileUrl])
+            console.log('File URL thumb for', f.path, fileUrl)
           } catch {}
         }
       }
@@ -119,6 +143,36 @@ function HomeScreen() {
   }
 
   // 設定はSidebarのクイックアクションに移動
+
+  const applyTheme = async (t: 'system'|'light'|'dark') => {
+    setTheme(t)
+    const applied = t === 'system'
+      ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : t
+    try { document.body.setAttribute('data-theme', applied==='light'?'light':'dark') } catch {}
+    localStorage.setItem('sis-theme', applied)
+    try { await api.setSettings({ ...(await api.getSettings().catch(()=>({} as any))), theme: t }) } catch {}
+    try { await api.emitGlobalEvent('sis:apply-theme', { theme: applied }) } catch {}
+  }
+
+  const pickWallpaper = async () => {
+    const picked = await api.pickImageFile()
+    if (!picked) return
+    setWallpaper(picked)
+    try { await api.setSettings({ ...(await api.getSettings().catch(()=>({} as any))), wallpaper: picked }) } catch {}
+    try {
+      const cssVal = await api.cssUrlForPath(picked)
+      document.documentElement.style.setProperty('--desktop-wallpaper', cssVal)
+      try { await api.emitGlobalEvent('sis:wallpaper-changed', { css: cssVal }) } catch {}
+    } catch {}
+  }
+
+  const clearWallpaper = async () => {
+    setWallpaper('')
+    try { await api.setSettings({ ...(await api.getSettings().catch(()=>({} as any))), wallpaper: '' }) } catch {}
+    document.documentElement.style.removeProperty('--desktop-wallpaper')
+    try { await api.emitGlobalEvent('sis:wallpaper-changed', { css: '' }) } catch {}
+  }
 
   return (
     <div className="futuristic-home" style={{ paddingBottom: 'var(--sis-dock-height, 68px)' }}>
@@ -144,12 +198,37 @@ function HomeScreen() {
               })}
             </div>
           </div>
-          <div className="welcome-visual">
-            <div className="hologram-circle"></div>
-            <div className="data-streams">
-              <div className="stream"></div>
-              <div className="stream"></div>
-              <div className="stream"></div>
+          <div className="welcome-visual" style={{ minWidth: 320 }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              <div className="setting-group">
+                <label className="setting-label">テーマ</label>
+                <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                  {(['system','light','dark'] as const).map(t => (
+                    <button key={t} className={`game-btn ${theme===t?'primary':'secondary'}`} onClick={()=>applyTheme(t)}>{t==='system'?'システム':t==='light'?'ライト':'ダーク'}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="setting-group">
+                <label className="setting-label">壁紙</label>
+                <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+                  <input type="text" className="game-input" placeholder="/path/to/wallpaper.jpg または url(...)" value={wallpaper} onChange={async (e)=>{
+                    const v = e.target.value; setWallpaper(v)
+                  }} style={{ minWidth: 180 }} />
+                  <button className="game-btn secondary" onClick={pickWallpaper}>画像を選択</button>
+                  <button className="game-btn secondary" onClick={clearWallpaper}>クリア</button>
+                  <button className="game-btn primary" onClick={async()=>{
+                    if (!wallpaper) return
+                    try {
+                      const cssVal = await api.cssUrlForPath(wallpaper)
+                      document.documentElement.style.setProperty('--desktop-wallpaper', cssVal)
+                      try { await api.emitGlobalEvent('sis:wallpaper-changed', { css: cssVal }) } catch {}
+                      try { await api.setSettings({ ...(await api.getSettings().catch(()=>({} as any))), wallpaper }) } catch {}
+                    } catch (e) {
+                      alert('壁紙の適用に失敗しました')
+                    }
+                  }}>適用</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -224,27 +303,56 @@ function HomeScreen() {
                 <div className="file-thumb">
                   {file.is_dir ? (
                     <div className="file-glyph">📁</div>
-                  ) : /\.(png|jpg|jpeg|gif|webp|bmp|svg)$/i.test(file.name) ? (
+                  ) : /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.name) ? (
                     <img
                       src={thumbs[file.path] || ('file://' + file.path)}
                       alt="preview"
                       loading="lazy"
                       decoding="async"
                       onError={(e)=>{ 
-                        // 一度だけ convertFileSrc → file:// の順に試す。両方失敗なら非表示（フォールバックグリフに任せる）
                         const img = e.target as HTMLImageElement
                         const current = img.getAttribute('data-fallback') || ''
                         if (!current && !thumbs[file.path]) {
+                          console.log('No thumb for', file.path, 'trying fallback')
                           try {
                             img.setAttribute('data-fallback', 'convert')
-                            import('@tauri-apps/api/core').then(mod=>{ try { img.src = mod.convertFileSrc(file.path) } catch { img.src = 'file://' + file.path } })
+                            import('@tauri-apps/api/core').then(mod=>{ try { img.src = mod.convertFileSrc(file.path); console.log('Convert fallback for', file.path) } catch { img.src = 'file://' + file.path } })
                           } catch {
                             img.setAttribute('data-fallback', 'file')
                             img.src = 'file://' + file.path
+                            console.log('File URL fallback for', file.path)
                           }
-                        } else { img.style.display='none' }
+                        } else { 
+                          console.warn('Image error for', file.path, 'no more fallback')
+                          img.style.display='none' 
+                        }
                       }}
                     />
+                  ) : /\.(mp4|webm|ogg|mov|m4v)$/i.test(file.name) ? (
+                    <video 
+                      muted 
+                      preload="metadata" 
+                      src={'file://' + file.path}
+                      style={{ width:'100%', height:'100%', objectFit:'cover' }}
+                      onLoadedMetadata={(e)=>{ const v=e.currentTarget; v.currentTime = Math.min(0.1, (v.duration||1)/10) }}
+                      onError={async (e)=>{ 
+                        const v = e.currentTarget as HTMLVideoElement
+                        try {
+                          const mod = await import('@tauri-apps/api/core')
+                          v.src = mod.convertFileSrc(file.path)
+                        } catch {
+                          v.style.display='none'
+                        }
+                      }}
+                    />
+                  ) : /\.(txt|md|log)$/i.test(file.name) ? (
+                    <div className="file-glyph" style={{fontSize:10, lineHeight:1.2, padding:6, textAlign:'left', width:'100%', height:'100%', overflow:'hidden'}}>
+                      <span style={{opacity:.7}}>TXT</span>
+                    </div>
+                  ) : /\.(mp3|wav|flac|aac|m4a|ogg)$/i.test(file.name) ? (
+                    <div className="file-glyph">🎵</div>
+                  ) : /\.(pdf)$/i.test(file.name) ? (
+                    <div className="file-glyph">📕</div>
                   ) : (
                     <div className="file-glyph">📄</div>
                   )}

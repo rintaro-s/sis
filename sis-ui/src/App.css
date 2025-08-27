@@ -64,7 +64,7 @@
   --accent-primary: #0091ff;
   --accent-secondary: #ff3d8b;
   
-  --app-bg: linear-gradient(135deg, #0a0f1c 0%, #1a1f2e 40%, #0f1419 100%);
+  --app-bg: linear-gradient(135deg, #1a1f2e 0%, #2a2f3e 40%, #1f2429 100%);
   --panel-bg: rgba(255, 255, 255, 0.05);
   --panel-border: rgba(255, 255, 255, 0.1);
   --accent-blue: #0096ff;

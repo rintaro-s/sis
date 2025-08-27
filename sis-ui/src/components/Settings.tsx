@@ -137,6 +137,10 @@ function Settings() {
   }
 
   const save = async () => { try { 
+    console.log('[Settings] Saving settings:', draft)
+    alert('[Settings] Saving settings: ' + JSON.stringify(draft).slice(0, 200) + '...')
+    // バックエンドログに書き込む
+    try { await api.runSafeCommand(`echo "[FRONTEND] Settings save started: ${JSON.stringify(draft).slice(0, 100)}..." >> ~/.local/share/sis-ui/logs/frontend.log`) } catch {}
     // 設定をJSONで保存（appearanceも含む）
     const settingsToSave = {
       ...draft,
@@ -148,6 +152,10 @@ function Settings() {
     localStorage.setItem('sis-ui-settings-backup', JSON.stringify(draft))
   // すべてのウィンドウへ統合イベントで即時伝搬
   try { await api.emitGlobalEvent('sis:settings-saved', settingsToSave) } catch {}
+    console.log('[Settings] Emitted sis:settings-saved')
+    alert('[Settings] Settings saved successfully!')
+    // バックエンドログに書き込む
+    try { await api.runSafeCommand(`echo "[FRONTEND] Settings saved successfully!" >> ~/.local/share/sis-ui/logs/frontend.log`) } catch {}
     // 外観の即時反映
     applyAppearance(draft.appearance)
     // テーマの即時反映（ボタン経由で未適用の変更も拾う）
@@ -157,17 +165,20 @@ function Settings() {
       try { document.body.setAttribute('data-theme', applied==='light'?'light':'dark') } catch {}
       localStorage.setItem('sis-theme', applied)
       await api.emitGlobalEvent('sis:apply-theme', { theme: applied })
+      console.log('[Settings] Emitted sis:apply-theme:', applied)
     } catch {}
     // 壁紙の即時適用（CSS変数に設定）
     if (draft.wallpaper) {
       const cssVal = await api.cssUrlForPath(draft.wallpaper)
       document.documentElement.style.setProperty('--desktop-wallpaper', cssVal)
       try { await api.emitGlobalEvent('sis:wallpaper-changed', { css: cssVal }) } catch {}
+      console.log('[Settings] Emitted sis:wallpaper-changed:', cssVal)
     } else {
       document.documentElement.style.removeProperty('--desktop-wallpaper')
       try { await api.emitGlobalEvent('sis:wallpaper-changed', { css: '' }) } catch {}
+      console.log('[Settings] Emitted sis:wallpaper-changed: cleared')
     }
-  } catch (e) { console.error(e); alert('保存に失敗しました') } }
+  } catch (e) { console.error('[Settings] Save failed:', e); alert('保存に失敗しました: ' + e) } }
 
   const requestSudoAction = (action: string) => {
     setPendingAction(action)
@@ -227,7 +238,7 @@ function Settings() {
             <h2 className="game-card-title">システム設定</h2>
             <div className="settings-actions">
               {isDirty && (<>
-                <button className="game-btn primary" onClick={save}>保存して終了</button>
+                <button className="game-btn primary" onClick={save}>保存</button>
                 <button className="game-btn secondary" onClick={discard}>変更を破棄</button>
               </>)}
             </div>
@@ -334,6 +345,8 @@ function Settings() {
                   const picked = await api.pickImageFile(); 
                   if (!picked) return;
                   console.log('Picked wallpaper:', picked)
+                  // バックエンドログに書き込む
+                  try { await api.runSafeCommand(`echo "[FRONTEND] Wallpaper picked: ${picked}" >> ~/.local/share/sis-ui/logs/frontend.log`) } catch {}
                   // 保存用には実パス/URL文字列、表示用にはCSS url(...) を使い分ける
                   setDraft((p:any)=>({ ...p, wallpaper: picked }))
                   const cssVal = await api.cssUrlForPath(picked)

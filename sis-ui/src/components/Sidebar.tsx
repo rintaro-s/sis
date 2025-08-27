@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { api, type AppInfo } from '../services/api';
 import './Sidebar.css';
+import './Settings.css';
 
 type SidebarProps = {
   isCollapsed: boolean;
@@ -8,9 +9,11 @@ type SidebarProps = {
 };
 
 function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
+  console.log(`[Sidebar] render collapsed=${isCollapsed}`);
   const [activeSection, setActiveSection] = useState('actions');
   const [notifications] = useState<any[]>([]); // 実際の通知がない場合は空配列
   const [fav, setFav] = useState<AppInfo[]>([])
+  const hideTimerRef = useRef<number | null>(null);
 
   useEffect(()=>{
     let mounted = true
@@ -26,15 +29,71 @@ function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
 
   const unpin = async (name: string)=>{ const r=await api.removeFavoriteApp(name); if(r.ok){ const list=await api.getFavoriteApps(); setFav(list); window.dispatchEvent(new Event('sis:favorites-updated')) } }
 
+  const resetHideTimer = () => {
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+    }
+    if (!isCollapsed) {
+      hideTimerRef.current = setTimeout(() => {
+        onToggle();
+      }, 5000);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    // サイドバー領域から離れたら即時に非表示
+    if (!isCollapsed) {
+      onToggle();
+    }
+    // 念のためタイマーもクリア
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+  };
+
+  const handleMouseEnter = () => {
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+  };
+
+  const handleInteraction = () => {
+    resetHideTimer();
+  };
+
+  useEffect(() => {
+    if (!isCollapsed) {
+      resetHideTimer();
+    } else {
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+      }
+    };
+  }, [isCollapsed]);
+
   const sections = [
-    { id: 'pinned', icon: 'PIN', label: 'ピン留め', count: fav.length },
-    { id: 'actions', icon: 'ACT', label: 'クイック', count: 0 },
+  { id: 'pinned', icon: 'PIN', label: 'ピン留め', count: fav.length },
+  { id: 'actions', icon: 'SYS', label: 'システム', count: 0 },
     { id: 'notifications', icon: '!', label: 'お知らせ', count: notifications.length },
     { id: 'tasks', icon: 'T', label: 'タスク', count: 0 },
   ];
 
   return (
-    <aside className={`futuristic-sidebar ${isCollapsed ? 'collapsed' : ''}`}>
+    <aside 
+      className={`futuristic-sidebar ${isCollapsed ? 'collapsed' : ''}`}
+      onMouseLeave={handleMouseLeave}
+      onMouseEnter={handleMouseEnter}
+  onMouseMove={handleInteraction}
+      onClick={handleInteraction}
+    >
       <div className="sidebar-header">
         <button className="sidebar-toggle" onClick={(e) => {
           e.preventDefault();
@@ -77,37 +136,9 @@ function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
         ))}
       </nav>
 
-      {/* クイックアクション */}
+      {/* システムコントロール */}
       {!isCollapsed && activeSection === 'actions' && (
-        <div className="sidebar-content">
-          <div className="content-header">
-            <h3>クイックアクション</h3>
-          </div>
-          <div className="quick-actions">
-            <button className="qa-btn" onClick={async () => { const r = await api.openSettingsWindow(); if(!r.ok){ window.dispatchEvent(new Event('sis:open-settings')) } }}>
-              設定を開く
-            </button>
-            <button
-              className="qa-btn"
-              onClick={async () => {
-                const btn = document.activeElement as HTMLButtonElement | null
-                if (btn) { btn.disabled = true; btn.innerText = '10秒後に撮影…'; }
-                setTimeout(async () => {
-                  await api.takeScreenshot();
-                  if (btn) { btn.disabled = false; btn.innerText = 'スクリーンショット(10秒後)'; }
-                }, 10000);
-              }}
-            >
-              スクリーンショット(10秒後)
-            </button>
-            <button className="qa-btn" onClick={() => api.openPath('~')}>
-              ファイルを開く
-            </button>
-            <button className="qa-btn" onClick={()=>api.launchApp('gnome-terminal')}>ターミナルを起動</button>
-            <button className="qa-btn" onClick={async()=>{ if(!confirm('再起動します。よろしいですか？')) return; await api.powerAction('reboot') }}>再起動</button>
-            <button className="qa-btn danger" onClick={async()=>{ if(!confirm('電源を切ります。よろしいですか？')) return; await api.powerAction('shutdown') }}>電源オフ</button>
-          </div>
-        </div>
+        <SystemControls />
       )}
 
       {/* ピン留め */}
@@ -174,3 +205,93 @@ function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
 }
 
 export default Sidebar;
+
+function SystemControls() {
+  const [volume, setVolume] = useState(50)
+  const [brightness, setBrightness] = useState(80)
+  const [network, setNetwork] = useState(true)
+  const [bluetooth, setBluetooth] = useState(true)
+  const [loggingEnabled, setLoggingEnabled] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+    ;(async()=>{
+      try {
+        const s = await api.getSettings().catch(()=>({}))
+        if (!mounted) return
+        setLoggingEnabled(!!(s as any)?.logging_enabled)
+      } catch {}
+      try {
+        const st = await api.controlCenterState()
+        if (!mounted || !st) return
+        if (typeof st.volume === 'number') setVolume(st.volume)
+        if (typeof st.brightness === 'number') setBrightness(st.brightness)
+        if (typeof st.network === 'boolean') setNetwork(st.network)
+        if (typeof st.bluetooth === 'boolean') setBluetooth(st.bluetooth)
+      } catch {}
+    })()
+    return () => { mounted = false }
+  }, [])
+
+  const setVol = async (v:number)=>{ setVolume(v); const r = await api.setVolume(v); if(!r.ok) alert('音量の変更に失敗') }
+  const setBrt = async (v:number)=>{ setBrightness(v); const r = await api.setBrightness(v); if(!r.ok) alert('輝度の変更に失敗') }
+  const toggleNet = async ()=>{ const n=!network; setNetwork(n); const r=await api.networkSet(n); if(!r.ok) alert('ネットワーク切替に失敗') }
+  const toggleBt = async ()=>{ const n=!bluetooth; setBluetooth(n); const r=await api.bluetoothSet(n); if(!r.ok) alert('Bluetooth切替に失敗') }
+
+  return (
+    <div className="sidebar-content">
+      <div className="content-header"><h3>システムコントロール</h3></div>
+      <div className="control-grid">
+        <div className="control-item">
+          <label className="setting-label">音量</label>
+          <div className="slider-container">
+            <input type="range" min={0} max={100} value={volume} onChange={e=>setVol(parseInt(e.target.value))} className="game-slider" />
+            <span className="slider-value">{volume}%</span>
+          </div>
+        </div>
+        <div className="control-item">
+          <label className="setting-label">輝度</label>
+          <div className="slider-container">
+            <input type="range" min={0} max={100} value={brightness} onChange={e=>setBrt(parseInt(e.target.value))} className="game-slider" />
+            <span className="slider-value">{brightness}%</span>
+          </div>
+        </div>
+        <div className="control-item">
+          <label className="setting-label">ネットワーク</label>
+          <button className={`game-btn toggle ${network?'active':''}`} onClick={toggleNet}>{network?'オン':'オフ'}</button>
+        </div>
+        <div className="control-item">
+          <label className="setting-label">Bluetooth</label>
+          <button className={`game-btn toggle ${bluetooth?'active':''}`} onClick={toggleBt}>{bluetooth?'オン':'オフ'}</button>
+        </div>
+      </div>
+      <div className="power-controls">
+        <button className="game-btn danger small" onClick={async()=>{ if(!confirm('ログアウトします。よろしいですか？')) return; await api.powerAction('logout') }}>ログアウト</button>
+        <button className="game-btn danger small" onClick={async()=>{ if(!confirm('再起動します。よろしいですか？')) return; await api.powerAction('reboot') }}>再起動</button>
+        <button className="game-btn danger small" onClick={async()=>{ if(!confirm('電源を切ります。よろしいですか？')) return; await api.powerAction('shutdown') }}>シャットダウン</button>
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <label className="setting-label">バックエンドログ</label>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <button className={`game-btn ${loggingEnabled?'primary':'secondary'}`} onClick={async()=>{
+            const next = !loggingEnabled
+            setLoggingEnabled(next)
+            try {
+              const s = await api.getSettings().catch(()=>({}))
+              await api.setSettings({ ...(s as any), logging_enabled: next })
+              try { await api.emitGlobalEvent('sis:settings-saved', { ...(s as any), logging_enabled: next }) } catch {}
+            } catch {}
+          }}>{loggingEnabled?'有効':'無効'}</button>
+          <span style={{ fontSize: 12, opacity: .8 }}>~/.local/share/sis-ui/logs/backend.log</span>
+          <button className="game-btn secondary" onClick={async()=>{ const text = await api.getBackendLog(200); alert(text || '(空)') }}>表示</button>
+          <button className="game-btn secondary" onClick={async()=>{ await api.clearBackendLog() }}>クリア</button>
+        </div>
+      </div>
+      <div className="quick-actions" style={{ marginTop: 12 }}>
+        <button className="qa-btn" onClick={() => api.openPath('~')}>ホームを開く</button>
+        <button className="qa-btn" onClick={()=>api.launchApp('gnome-terminal')}>ターミナル</button>
+        <button className="qa-btn" onClick={async()=>{ const btn = document.activeElement as HTMLButtonElement | null; if(btn){ btn.disabled=true; const t=btn.innerText; btn.innerText='10秒後に撮影…'; setTimeout(async()=>{ await api.takeScreenshot(); if(btn){ btn.disabled=false; btn.innerText=t } }, 10000) } }}>スクリーンショット(10秒後)</button>
+      </div>
+    </div>
+  )
+}

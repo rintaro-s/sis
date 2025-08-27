@@ -15,7 +15,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi'
 import Sidebar from './components/Sidebar.tsx'
 import MiniControlCenter from './components/MiniControlCenter'
-import Settings from './components/Settings'
+// Settings app was removed; controls are distributed into Sidebar/HomeScreen
 import CommandPalette from './components/CommandPalette'
 import SimpleTerminal from './components/SimpleTerminal'
 import { listen } from '@tauri-apps/api/event'
@@ -39,7 +39,6 @@ function useWindowLabel() {
 function DesktopRoot() {
   // デスクトップはOS上で常時表示。ここに設定/CC/ターミナル/ランチャーを統合する。
   const [isMenuVisible, setIsMenuVisible] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const [ccOpen, setCcOpen] = useState(false)
   const [termOpen, setTermOpen] = useState(false)
   const [termCmd, setTermCmd] = useState<string | undefined>(undefined)
@@ -87,8 +86,10 @@ function DesktopRoot() {
     const unsubs: Array<() => void> = []
     // 一括適用（堅牢な受信側）
     listen('sis:settings-saved', async (e:any)=>{
+      console.log('[DesktopRoot] Received sis:settings-saved:', e?.payload)
       const s = e?.payload || await api.getSettings().catch(()=>({}))
       await applyAllToDom(s, { cssUrlForPath: api.cssUrlForPath })
+      console.log('[DesktopRoot] Applied settings')
     }).then(u=>unsubs.push(u))
   // フォーカス時・周期的に再適用（取りこぼし防止）
   const reapplyDock = async ()=>{ try { const s = await api.getSettings(); await applyAllToDom(s, { cssUrlForPath: api.cssUrlForPath }) } catch {} }
@@ -116,15 +117,7 @@ function DesktopRoot() {
         else root.style.removeProperty('--desktop-wallpaper')
       }
     }).then(u => unsubs.push(u))
-    listen('sis:open-settings', async () => {
-      // デスクトップ環境では専用の設定ウィンドウを開く（Dockに常駐させない）
-      try {
-        await invoke('open_settings_window')
-        return
-      } catch {}
-      // フォールバック（Tauri未接続など）
-      setSettingsOpen(true)
-    }).then(u => unsubs.push(u))
+  // 設定ウィンドウは廃止
   listen('sis:toggle-cc', () => setCcOpen(p => !p)).then(u => unsubs.push(u))
   // DOM側フォールバック（Dockなどからの発火を確実に受ける）
   const onToggleCc = () => setCcOpen(p=>!p)
@@ -137,14 +130,11 @@ function DesktopRoot() {
     listen('sis:toggle-builtin-terminal', () => setTermOpen(p => !p)).then(u => unsubs.push(u))
 
     // DOMカスタムイベント（同ウィンドウ内用フォールバック）
-    const openSettings = async () => {
-      try { await invoke('open_settings_window'); return } catch {}
-      setSettingsOpen(true)
-    }
+  // 設定ウィンドウは廃止
     const toggleCc = () => setCcOpen(p => !p)
     const openBuiltinTerm = (e: any) => { setTermCmd(e?.detail?.cmd); setTermAutoRun(!!e?.detail?.autoRun); setTermOpen(true) }
     const toggleBuiltin = () => setTermOpen(p => !p)
-    window.addEventListener('sis:open-settings', openSettings as any)
+  // window.addEventListener('sis:open-settings', openSettings as any) // removed
     window.addEventListener('sis:toggle-cc', toggleCc as any)
     window.addEventListener('sis:open-builtin-terminal', openBuiltinTerm as any)
     window.addEventListener('sis:toggle-builtin-terminal', toggleBuiltin as any)
@@ -153,18 +143,14 @@ function DesktopRoot() {
       if (e.altKey && e.code === 'Space') { e.preventDefault(); setIsMenuVisible(p=>!p) }
       if (e.ctrlKey && e.shiftKey && (e.key.toLowerCase() === 'c')) { e.preventDefault(); setCcOpen(p=>!p) }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') { e.preventDefault(); setIsMenuVisible(p => !p) }
-      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
-        e.preventDefault();
-        // 可能なら専用ウィンドウを開く
-        (async()=>{ try { await invoke('open_settings_window') } catch { setSettingsOpen(true) } })()
-      }
+  // Ctrl+, was opening settings; now unused
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === '7') { e.preventDefault(); setTermOpen(p=>!p) }
-      if (e.code === 'Escape') { setIsMenuVisible(false); setSettingsOpen(false); setCcOpen(false) }
+  if (e.code === 'Escape') { setIsMenuVisible(false); setCcOpen(false) }
     }
     window.addEventListener('keydown', onKey)
   return () => { 
       window.removeEventListener('keydown', onKey);
-      window.removeEventListener('sis:open-settings', openSettings as any)
+  // window.removeEventListener('sis:open-settings', openSettings as any)
       window.removeEventListener('sis:toggle-cc', toggleCc as any)
       window.removeEventListener('sis:open-builtin-terminal', openBuiltinTerm as any)
   window.removeEventListener('sis:toggle-builtin-terminal', toggleBuiltin as any)
@@ -190,14 +176,6 @@ function DesktopRoot() {
       <MiniControlCenter open={ccOpen} onClose={()=>setCcOpen(false)} />
       <CommandPalette isVisible={isMenuVisible} onClose={() => setIsMenuVisible(false)} />
       <SimpleTerminal open={termOpen} initialCmd={termCmd} initialAutoRun={termAutoRun} onClose={()=>{ setTermOpen(false); setTermAutoRun(false) }} />
-      {settingsOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <button className="modal-close-btn" onClick={()=>setSettingsOpen(false)}>×</button>
-            <Settings />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -291,8 +269,10 @@ function DockRoot() {
     // 設定反映イベント（Dock側）
     const unsubs: Array<() => void> = []
     listen('sis:settings-saved', async (e:any)=>{
+      console.log('[DockRoot] Received sis:settings-saved:', e?.payload)
       const s = e?.payload || await api.getSettings().catch(()=>({}))
       await applyAllToDom(s, { cssUrlForPath: api.cssUrlForPath })
+      console.log('[DockRoot] Applied settings')
     }).then(u=>unsubs.push(u))
     // フォーカス時・周期的に再適用（取りこぼし防止: Dock）
     const reapplyDock = async () => {
@@ -339,12 +319,12 @@ function SidebarRoot() {
   // タイマーの重複生成を回避
   const hoverTimerRef = useRef<number | null>(null)
   const clearHoverTimer = () => { if (hoverTimerRef && hoverTimerRef.current) { clearTimeout(hoverTimerRef.current); hoverTimerRef.current = null } }
-  // アイドル自動クローズ（7秒）
+  // アイドル自動クローズ（5秒）
   const idleTimerRef = useRef<number | null>(null)
   const resetIdle = () => {
     if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null }
     if (!collapsed) {
-      idleTimerRef.current = setTimeout(() => { setCollapsed(true) }, 7000) as unknown as number
+      idleTimerRef.current = setTimeout(() => { setCollapsed(true) }, 5000) as unknown as number
     }
   }
   
@@ -401,8 +381,10 @@ function SidebarRoot() {
     // 設定反映イベント（Sidebar側）
     const unsubs: Array<() => void> = []
     listen('sis:settings-saved', async (e:any)=>{
+      console.log('[SidebarRoot] Received sis:settings-saved:', e?.payload)
       const s = e?.payload || await api.getSettings().catch(()=>({}))
       await applyAllToDom(s, { cssUrlForPath: api.cssUrlForPath })
+      console.log('[SidebarRoot] Applied settings')
     }).then(u=>unsubs.push(u))
   // フォーカス時・周期的に再適用
   const reapplySide = async ()=>{ try { const s = await api.getSettings(); await applyAllToDom(s, { cssUrlForPath: api.cssUrlForPath }) } catch {} }
@@ -431,7 +413,8 @@ function SidebarRoot() {
   // Escで閉じる + 自動開閉（安定化: デバウンス/mouseleaveで閉じる）
   const onKey = (e: KeyboardEvent)=>{ if (e.key==='Escape') setCollapsed(true) }
   const onMouseMove = (e: MouseEvent) => {
-    resetIdle()
+    // アイドルタイマーはマウス移動でリセットしない（閉じない問題の原因）
+    // resetIdle() を削除
     // 左端に1秒滞在で開く（多重タイマー防止）
     if (e.clientX <= 4 && collapsed) {
       if (!hoverTimerRef.current) {
@@ -447,10 +430,8 @@ function SidebarRoot() {
     }
   }
   const onMouseLeave = () => {
-    // ウィンドウ外に出たら少し待って閉じる
-    if (!collapsed) {
-      setTimeout(() => setCollapsed(true), 300)
-    }
+  // ウィンドウ外に出たら即座に閉じる（誤作動防止のためディレイ削除）
+  if (!collapsed) { setCollapsed(true) }
     clearHoverTimer()
     if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null }
   }
@@ -514,16 +495,7 @@ function Root() {
   if (label === 'topbar') return <TopBarRoot />;
   if (label === 'dock') return <DockRoot />;
   if (label === 'sidebar') return <SidebarRoot />;
-  if (label === 'settings') {
-    // 設定専用ウィンドウ
-    return (
-      <div style={{ width: '100dvw', height: '100dvh', background: 'var(--bg-primary)' }}>
-        <div className="modal-content" style={{ width: 'min(980px, 95vw)', margin: '24px auto', maxHeight: 'calc(100vh - 48px)', overflow: 'auto' }}>
-          <Settings />
-        </div>
-      </div>
-    )
-  }
+  // 'settings' window was removed
   // 既存の単一ウィンドウモード互換
   return <App />;
 }

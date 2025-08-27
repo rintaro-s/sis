@@ -105,6 +105,30 @@ function FileManager() {
             {error && <div className="browser-status error">{error}</div>}
             {!loading && !error && entries.map(e=> (
               <div key={e.path} className={`entry ${e.kind}`} onDoubleClick={()=> e.kind==='dir'? browse(e.path) : open(e.path)}>
+                {e.kind === 'file' && /\.(png|jpg|jpeg|gif|webp|bmp|svg)$/i.test(e.name) ? (
+                  <div className="entry-preview">
+                    <img 
+                      src="" 
+                      alt={e.name} 
+                      style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 4 }} 
+                      onLoad={async (ev) => {
+                        try {
+                          const img = ev.target as HTMLImageElement;
+                          const dataUrl = await api.fileToDataUrl(e.path);
+                          img.src = dataUrl;
+                        } catch {
+                          // fallback to icon
+                          (ev.target as HTMLImageElement).style.display = 'none';
+                        }
+                      }}
+                      onError={(ev) => {
+                        (ev.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <span className="entry-icon">{e.kind === 'dir' ? '📁' : '📄'}</span>
+                )}
                 <span className="entry-name">{e.name}</span>
                 <span className="entry-kind">{e.kind==='dir'?'フォルダ':'ファイル'}</span>
               </div>

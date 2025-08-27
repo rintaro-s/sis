@@ -52,15 +52,21 @@ export async function applyWallpaperToDom(wallpaper: string | undefined, cssUrlF
 }
 
 export async function applyAllToDom(settings: any, helpers: { cssUrlForPath: (v:string)=>Promise<string> }) {
+  console.log('[domApply] Applying settings:', settings)
   // Ignore stale updates using monotonically increasing revision
   const inc = (settings && typeof settings.rev === 'number') ? settings.rev : (Number(settings?.rev) || 0)
   if (typeof (window as any).__sis_settings_rev === 'number' && inc <= (window as any).__sis_settings_rev) {
+    console.log('[domApply] Ignoring stale update, rev:', inc, 'current:', (window as any).__sis_settings_rev)
     return
   }
   ;(window as any).__sis_settings_rev = inc
+  console.log('[domApply] Applying theme:', settings?.theme)
   applyThemeToDom(settings?.theme)
+  console.log('[domApply] Applying appearance:', settings?.appearance)
   applyAppearanceToDom(settings?.appearance)
+  console.log('[domApply] Applying wallpaper:', settings?.wallpaper)
   await applyWallpaperToDom(settings?.wallpaper, helpers.cssUrlForPath)
+  console.log('[domApply] Applied all')
 }
 
 let systemThemeWatcherBound = false
