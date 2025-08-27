@@ -36,7 +36,11 @@ function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
   return (
     <aside className={`futuristic-sidebar ${isCollapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-header">
-        <button className="sidebar-toggle" onClick={onToggle}>
+        <button className="sidebar-toggle" onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggle();
+        }}>
           <span className="toggle-icon">{isCollapsed ? '»' : '«'}</span>
         </button>
         {!isCollapsed && (

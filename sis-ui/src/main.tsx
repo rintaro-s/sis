@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useState } from 'react'
+import { StrictMode, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css';
 import './global.css';
@@ -20,6 +20,7 @@ import CommandPalette from './components/CommandPalette'
 import SimpleTerminal from './components/SimpleTerminal'
 import { listen } from '@tauri-apps/api/event'
 import { api } from './services/api'
+import { applyAllToDom, ensureSystemThemeWatcher } from './services/domApply'
 
 function useWindowLabel() {
   const [label, setLabel] = useState<string>('');
@@ -45,12 +46,13 @@ function DesktopRoot() {
   const [termAutoRun, setTermAutoRun] = useState<boolean>(false)
 
   useEffect(() => {
+  // OSテーマ変化に追従（system選択時）
+  ensureSystemThemeWatcher()
     const w = getCurrentWindow();
     (async () => {
       try {
         // Dockやアプリ一覧に出さない
         // setSkipTaskbarはサポート環境でのみ動作
-        // @ts-ignore
         if (typeof w.setSkipTaskbar === 'function') await (w as any).setSkipTaskbar(true)
       } catch {}
     })()
@@ -60,7 +62,14 @@ function DesktopRoot() {
     // 起動時に保存済み設定を反映（テーマ/外観/壁紙）
     (async()=>{
       try {
-        const s = await api.getSettings()
+        let s = await api.getSettings()
+        // バックエンドが空を返した場合のフォールバック（localStorage）
+        if (!s || (typeof s === 'object' && Object.keys(s).length === 0)) {
+          try {
+            const raw = localStorage.getItem('sis-ui-settings-backup')
+            if (raw) s = { ...(s||{}), ...JSON.parse(raw) }
+          } catch {}
+        }
         const t = (s?.theme==='system') ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : (s?.theme||'dark')
         try { document.body.setAttribute('data-theme', t==='light'?'light':'dark') } catch {}
         const ap = s?.appearance||{}
@@ -76,6 +85,16 @@ function DesktopRoot() {
     })()
     // Tauriイベント: Superキーや各操作をグローバルに受け取る
     const unsubs: Array<() => void> = []
+    // 一括適用（堅牢な受信側）
+    listen('sis:settings-saved', async (e:any)=>{
+      const s = e?.payload || await api.getSettings().catch(()=>({}))
+      await applyAllToDom(s, { cssUrlForPath: api.cssUrlForPath })
+    }).then(u=>unsubs.push(u))
+  // フォーカス時・周期的に再適用（取りこぼし防止）
+  const reapplyDock = async ()=>{ try { const s = await api.getSettings(); await applyAllToDom(s, { cssUrlForPath: api.cssUrlForPath }) } catch {} }
+  const onFocusDock = () => { reapplyDock() }
+  window.addEventListener('focus', onFocusDock)
+  const tickDockId = window.setInterval(reapplyDock, 10000)
     listen('super_key_pressed', () => setIsMenuVisible(p => !p)).then(u => unsubs.push(u))
     // 設定反映イベント
     listen('sis:apply-theme', (e:any)=>{
@@ -150,7 +169,9 @@ function DesktopRoot() {
       window.removeEventListener('sis:open-builtin-terminal', openBuiltinTerm as any)
   window.removeEventListener('sis:toggle-builtin-terminal', toggleBuiltin as any)
   window.removeEventListener('sis:toggle-cc', onToggleCc as any)
-      unsubs.forEach(u=>u()) 
+  unsubs.forEach(u=>u());
+  window.removeEventListener('focus', onFocusDock);
+  clearInterval(tickDockId);
     }
   }, [])
 
@@ -189,7 +210,6 @@ function TopBarRoot() {
         document.title = 'SIS TopBar';
         await w.setTitle('SIS TopBar');
   // タスクバー/Dockから非表示
-  // @ts-ignore
   if (typeof w.setSkipTaskbar === 'function') await (w as any).setSkipTaskbar(true)
         const mon = await currentMonitor();
         if (mon?.size) {
@@ -223,6 +243,7 @@ function TopBarRoot() {
 
 function DockRoot() {
   useEffect(() => {
+  ensureSystemThemeWatcher()
     const w = getCurrentWindow();
     (async () => {
       try {
@@ -234,7 +255,6 @@ function DockRoot() {
         document.title = 'SIS Dock';
         await w.setTitle('SIS Dock');
   // タスクバー/Dockから非表示
-  // @ts-ignore
   if (typeof w.setSkipTaskbar === 'function') await (w as any).setSkipTaskbar(true)
         const mon = await currentMonitor();
   const h = 68;
@@ -257,7 +277,10 @@ function DockRoot() {
     })();
     // 起動時に保存済み設定反映
     (async()=>{ try {
-      const s = await api.getSettings();
+      let s = await api.getSettings();
+      if (!s || (typeof s === 'object' && Object.keys(s).length===0)) {
+        try { const raw = localStorage.getItem('sis-ui-settings-backup'); if (raw) s = { ...(s||{}), ...JSON.parse(raw) } } catch {}
+      }
       const t = (s?.theme==='system') ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : (s?.theme||'dark')
       try { document.body.setAttribute('data-theme', t==='light'?'light':'dark') } catch {}
       const ap = s?.appearance||{}; const r=(v:number,min:number,max:number)=>Math.max(min,Math.min(max,Number(v)))
@@ -267,6 +290,20 @@ function DockRoot() {
     } catch {} })()
     // 設定反映イベント（Dock側）
     const unsubs: Array<() => void> = []
+    listen('sis:settings-saved', async (e:any)=>{
+      const s = e?.payload || await api.getSettings().catch(()=>({}))
+      await applyAllToDom(s, { cssUrlForPath: api.cssUrlForPath })
+    }).then(u=>unsubs.push(u))
+    // フォーカス時・周期的に再適用（取りこぼし防止: Dock）
+    const reapplyDock = async () => {
+      try {
+        const s = await api.getSettings()
+        await applyAllToDom(s, { cssUrlForPath: api.cssUrlForPath })
+      } catch {}
+    }
+    const onFocusDock = () => { reapplyDock() }
+    window.addEventListener('focus', onFocusDock)
+    const tickDockId = window.setInterval(reapplyDock, 10000)
     listen('sis:apply-theme', (e:any)=>{
       const t = e?.payload?.theme
       if (t==='light' || t==='dark') { try { document.body.setAttribute('data-theme', t==='light'?'light':'dark') } catch {} }
@@ -285,7 +322,7 @@ function DockRoot() {
         else root.style.removeProperty('--desktop-wallpaper')
       }
     }).then(u=>unsubs.push(u))
-    return ()=>{ unsubs.forEach(u=>u()) }
+  return ()=>{ unsubs.forEach(u=>u()); window.removeEventListener('focus', onFocusDock); clearInterval(tickDockId) }
   // Note: monitor change events are not exposed; re-evaluate on next launch/login
   }, []);
   return (
@@ -299,7 +336,20 @@ function DockRoot() {
 
 function SidebarRoot() {
   const [collapsed, setCollapsed] = useState(true);
+  // タイマーの重複生成を回避
+  const hoverTimerRef = useRef<number | null>(null)
+  const clearHoverTimer = () => { if (hoverTimerRef && hoverTimerRef.current) { clearTimeout(hoverTimerRef.current); hoverTimerRef.current = null } }
+  // アイドル自動クローズ（7秒）
+  const idleTimerRef = useRef<number | null>(null)
+  const resetIdle = () => {
+    if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null }
+    if (!collapsed) {
+      idleTimerRef.current = setTimeout(() => { setCollapsed(true) }, 7000) as unknown as number
+    }
+  }
+  
   useEffect(() => {
+  ensureSystemThemeWatcher()
     const w = getCurrentWindow();
     (async () => {
       try {
@@ -311,7 +361,6 @@ function SidebarRoot() {
         document.title = 'SIS Sidebar';
         await w.setTitle('SIS Sidebar');
   // タスクバー/Dockから非表示
-  // @ts-ignore
   if (typeof w.setSkipTaskbar === 'function') await (w as any).setSkipTaskbar(true)
   const mon = await currentMonitor();
   const width = collapsed ? 12 : 280; // 折りたたみ時は薄いハンドルだけ
@@ -336,7 +385,10 @@ function SidebarRoot() {
     })();
     // 起動時に保存済み設定反映
     (async()=>{ try {
-      const s = await api.getSettings();
+      let s = await api.getSettings();
+      if (!s || (typeof s === 'object' && Object.keys(s).length===0)) {
+        try { const raw = localStorage.getItem('sis-ui-settings-backup'); if (raw) s = { ...(s||{}), ...JSON.parse(raw) } } catch {}
+      }
       const t = (s?.theme==='system') ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : (s?.theme||'dark')
       try { document.body.setAttribute('data-theme', t==='light'?'light':'dark') } catch {}
       const ap = s?.appearance||{}; const r=(v:number,min:number,max:number)=>Math.max(min,Math.min(max,Number(v)))
@@ -348,6 +400,15 @@ function SidebarRoot() {
     } catch {} })()
     // 設定反映イベント（Sidebar側）
     const unsubs: Array<() => void> = []
+    listen('sis:settings-saved', async (e:any)=>{
+      const s = e?.payload || await api.getSettings().catch(()=>({}))
+      await applyAllToDom(s, { cssUrlForPath: api.cssUrlForPath })
+    }).then(u=>unsubs.push(u))
+  // フォーカス時・周期的に再適用
+  const reapplySide = async ()=>{ try { const s = await api.getSettings(); await applyAllToDom(s, { cssUrlForPath: api.cssUrlForPath }) } catch {} }
+  const onFocusSide = () => { reapplySide() }
+  window.addEventListener('focus', onFocusSide)
+  const tickSide = setInterval(reapplySide, 10000)
     listen('sis:apply-theme', (e:any)=>{
       const t = e?.payload?.theme
       if (t==='light' || t==='dark') { try { document.body.setAttribute('data-theme', t==='light'?'light':'dark') } catch {} }
@@ -367,20 +428,55 @@ function SidebarRoot() {
         else root.style.removeProperty('--desktop-wallpaper')
       }
     }).then(u=>unsubs.push(u))
-  // Escで閉じる
+  // Escで閉じる + 自動開閉（安定化: デバウンス/mouseleaveで閉じる）
   const onKey = (e: KeyboardEvent)=>{ if (e.key==='Escape') setCollapsed(true) }
+  const onMouseMove = (e: MouseEvent) => {
+    resetIdle()
+    // 左端に1秒滞在で開く（多重タイマー防止）
+    if (e.clientX <= 4 && collapsed) {
+      if (!hoverTimerRef.current) {
+        hoverTimerRef.current = setTimeout(() => { setCollapsed(false); hoverTimerRef.current = null }, 1000) as unknown as number
+      }
+    } else {
+      // 離れたらキャンセル
+      clearHoverTimer()
+    }
+    // 右へ十分離れたら閉じる
+    if (e.clientX > 300 && !collapsed) {
+      setCollapsed(true)
+    }
+  }
+  const onMouseLeave = () => {
+    // ウィンドウ外に出たら少し待って閉じる
+    if (!collapsed) {
+      setTimeout(() => setCollapsed(true), 300)
+    }
+    clearHoverTimer()
+    if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null }
+  }
+  const onKeyAny = () => resetIdle()
+  const onClickAny = () => resetIdle()
   window.addEventListener('keydown', onKey)
-  return ()=>{ unsubs.forEach(u=>u()); window.removeEventListener('keydown', onKey) }
+  window.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('mouseleave', onMouseLeave)
+  window.addEventListener('keypress', onKeyAny)
+  window.addEventListener('click', onClickAny)
+  return ()=>{ 
+    unsubs.forEach(u=>u()); 
+    window.removeEventListener('focus', onFocusSide);
+    clearInterval(tickSide);
+    window.removeEventListener('keydown', onKey)
+    window.removeEventListener('mousemove', onMouseMove)
+    window.removeEventListener('mouseleave', onMouseLeave)
+    window.removeEventListener('keypress', onKeyAny)
+    window.removeEventListener('click', onClickAny)
+    clearHoverTimer()
+    if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null }
+  }
   // Note: monitor change events are not exposed; re-evaluate on next launch/login
   }, [collapsed]);
   return (
     <div style={{ width: '100%', height: '100vh', background: 'transparent', pointerEvents: 'none' }}>
-      {/* 左端に常駐する細いハンドル（ウィンドウがcollapsed幅=12pxのときでも確実に反応） */}
-      <div
-    onClick={()=>setCollapsed(p=>!p)}
-        title="開く"
-        style={{ position:'absolute', left:0, top:0, bottom:0, width:12, cursor:'pointer', pointerEvents:'auto', background:'transparent' }}
-      />
       <div style={{ pointerEvents: 'auto', width: '100%', height: '100%' }}>
         <Sidebar isCollapsed={collapsed} onToggle={()=>setCollapsed(p=>!p)} />
       </div>
@@ -399,7 +495,6 @@ function Root() {
         document.title = 'SIS Desktop';
         await w.setTitle('SIS Desktop');
   // タスクバー/Dockから非表示
-  // @ts-ignore
   if (typeof w.setSkipTaskbar === 'function') await (w as any).setSkipTaskbar(true)
         await w.setFullscreen(true);
         await w.show();

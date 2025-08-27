@@ -91,13 +91,15 @@ $SUDO tee /etc/xdg/autostart/sis-ui.desktop >/dev/null <<'EOF'
 Type=Application
 Name=SIS UI
 Comment=Smart Interface System UI
+# Start app directly (systemctl --user can race early in session startup)
 Exec=/usr/bin/sis-ui
 Icon=sis-ui
 X-GNOME-Autostart-enabled=true
-# SISUI セッション限定で常駐（他DEのアプリ一覧/Dockには出さない）
-OnlyShowIn=SISUI;
+# GNOME と SISUI セッションで常駐（開発を楽にする）
+OnlyShowIn=GNOME;SISUI;
 X-GNOME-Autostart-Phase=Initialization
 NoDisplay=true
+X-GNOME-Autostart-Delay=5
 EOF
 
 log "[4/8] GDM ログインに SIS UI セッションを追加 (Wayland/Xorg)"
@@ -171,15 +173,22 @@ $SUDO systemctl enable --now bluetooth.service || true
 # ユーザー systemd で sis-ui を自動再起動（クラッシュ時の復帰）
 log "[6.5/8] ユーザー systemd サービス（自動再起動）"
 if command -v systemctl >/dev/null 2>&1; then
-  SVC=~/.config/systemd/user/sis-ui.service
-  mkdir -p ~/.config/systemd/user
-  cat > "$SVC" <<'UNIT'
+  # If invoked via sudo, install the unit for the real user (SUDO_USER)
+  if [[ -n "${SUDO_USER:-}" ]]; then
+    TARGET_USER="$SUDO_USER"
+    TARGET_HOME=$(eval echo "~$TARGET_USER")
+    SVC="$TARGET_HOME/.config/systemd/user/sis-ui.service"
+    install -d -m 0755 "$TARGET_HOME/.config/systemd/user"
+    cat > "$SVC" <<'UNIT'
 [Unit]
 Description=SIS UI Desktop Shell
 After=graphical-session.target
 
 [Service]
 Type=simple
+# avoid duplicate launches if already running under /opt
+ExecCondition=/bin/bash -lc '! pgrep -u %U -f "/opt/sis-ui/sis-ui"'
+ExecStartPre=/bin/bash -lc 'for i in {1..30}; do pgrep -u %U -f "gnome-shell|gnome-session-binary" >/dev/null 2>&1 && exit 0; sleep 1; done; exit 0'
 ExecStart=/usr/bin/sis-ui
 Restart=always
 RestartSec=2
@@ -188,8 +197,33 @@ Environment=XDG_CURRENT_DESKTOP=SISUI
 [Install]
 WantedBy=default.target
 UNIT
-  systemctl --user daemon-reload || true
-  systemctl --user enable --now sis-ui.service || true
+    # Reload/enable as the target user so the user's systemd recognizes the unit
+    sudo -u "$TARGET_USER" systemctl --user daemon-reload || true
+    sudo -u "$TARGET_USER" systemctl --user enable --now sis-ui.service || true
+  else
+    # fallback: install for the current user
+    SVC=~/.config/systemd/user/sis-ui.service
+    mkdir -p ~/.config/systemd/user
+    cat > "$SVC" <<'UNIT'
+[Unit]
+Description=SIS UI Desktop Shell
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecCondition=/bin/bash -lc '! pgrep -u %U -f "/opt/sis-ui/sis-ui"'
+ExecStartPre=/bin/bash -lc 'for i in {1..30}; do pgrep -u %U -f "gnome-shell|gnome-session-binary" >/dev/null 2>&1 && exit 0; sleep 1; done; exit 0'
+ExecStart=/usr/bin/sis-ui
+Restart=always
+RestartSec=2
+Environment=XDG_CURRENT_DESKTOP=SISUI
+
+[Install]
+WantedBy=default.target
+UNIT
+    systemctl --user daemon-reload || true
+    systemctl --user enable --now sis-ui.service || true
+  fi
 fi
 
 log "[7/8] SIS UI (Minimal) セッションを追加 (Openboxベース)"

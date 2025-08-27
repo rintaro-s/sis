@@ -339,7 +339,7 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px 12px;
+  padding: 6px 10px 10px; /* ヒットボックスを微縮小 */
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -369,10 +369,11 @@
   position: relative;
   width: var(--sis-app-icon, clamp(64px, 5vw, 96px));
   height: var(--sis-app-icon, clamp(64px, 5vw, 96px));
-  /* クリック当たり判定を広げる */
+  /* クリック当たり判定を少し小さく */
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 2px; /* わずかに縮小 */
 }
 
 .app-icon {

@@ -95,9 +95,18 @@ fi
 echo "[3/5] Prefer Tauri-generated .deb if available"
 # Try to use Tauri bundler's .deb directly for correct resource wiring
 TAURI_DEB=""
-if [[ -d "$UI_DIR/src-tauri/target/debian" ]]; then
-	TAURI_DEB=$(ls -1t "$UI_DIR/src-tauri/target/debian"/*.deb 2>/dev/null | head -n1 || true)
-fi
+# Common output locations by tauri-bundler
+TAURI_DEB_CANDIDATES=(
+	"$UI_DIR/src-tauri/target/release/bundle/deb" \
+	"$UI_DIR/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb" \
+	"$UI_DIR/src-tauri/target/debian"
+)
+for d in "${TAURI_DEB_CANDIDATES[@]}"; do
+	if [[ -d "$d" ]]; then
+		TAURI_DEB=$(ls -1t "$d"/*.deb 2>/dev/null | head -n1 || true)
+		[[ -n "$TAURI_DEB" ]] && break
+	fi
+done
 
 if [[ -n "$TAURI_DEB" && -f "$TAURI_DEB" ]]; then
 	echo "Found Tauri deb: $TAURI_DEB"

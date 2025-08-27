@@ -115,7 +115,7 @@ function Settings() {
     
     // CSSクラスを即座に適用
   const applied = theme === 'system' ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme
-  document.documentElement.className = applied === 'light' ? 'light-theme' : 'dark-theme'
+  try { document.body.setAttribute('data-theme', applied==='light'?'light':'dark') } catch {}
   localStorage.setItem('sis-theme', applied)
   // 全ウィンドウへ通知
   try { await api.emitGlobalEvent('sis:apply-theme', { theme: applied }) } catch {}
@@ -137,24 +137,37 @@ function Settings() {
   }
 
   const save = async () => { try { 
-    await api.setSettings(draft); 
+    // 設定をJSONで保存（appearanceも含む）
+    const settingsToSave = {
+      ...draft,
+      appearance: draft.appearance
+    }
+  await api.setSettings(settingsToSave); 
     setSettings(JSON.parse(JSON.stringify(draft))); 
     setIsDirty(false); 
     localStorage.setItem('sis-ui-settings-backup', JSON.stringify(draft))
+  // すべてのウィンドウへ統合イベントで即時伝搬
+  try { await api.emitGlobalEvent('sis:settings-saved', settingsToSave) } catch {}
     // 外観の即時反映
     applyAppearance(draft.appearance)
+    // テーマの即時反映（ボタン経由で未適用の変更も拾う）
+    try {
+      const pref = draft.theme || 'system'
+      const applied = pref === 'system' ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : pref
+      try { document.body.setAttribute('data-theme', applied==='light'?'light':'dark') } catch {}
+      localStorage.setItem('sis-theme', applied)
+      await api.emitGlobalEvent('sis:apply-theme', { theme: applied })
+    } catch {}
     // 壁紙の即時適用（CSS変数に設定）
     if (draft.wallpaper) {
-      const v = draft.wallpaper.trim()
-      const isUrlFunc = /^url\(/i.test(v)
-      const cssVal = isUrlFunc ? v : `url('${v}')`
+      const cssVal = await api.cssUrlForPath(draft.wallpaper)
       document.documentElement.style.setProperty('--desktop-wallpaper', cssVal)
       try { await api.emitGlobalEvent('sis:wallpaper-changed', { css: cssVal }) } catch {}
     } else {
       document.documentElement.style.removeProperty('--desktop-wallpaper')
       try { await api.emitGlobalEvent('sis:wallpaper-changed', { css: '' }) } catch {}
     }
-  } catch { alert('保存に失敗しました') } }
+  } catch (e) { console.error(e); alert('保存に失敗しました') } }
 
   const requestSudoAction = (action: string) => {
     setPendingAction(action)
@@ -216,14 +229,6 @@ function Settings() {
               {isDirty && (<>
                 <button className="game-btn primary" onClick={save}>保存して終了</button>
                 <button className="game-btn secondary" onClick={discard}>変更を破棄</button>
-                <button className="game-btn secondary" onClick={async()=>{ 
-                  await save(); 
-                  // テーマをOSにも反映（Ubuntu/GNOME）
-                  const t = (draft.theme||'system')
-                  if (t==='light' || t==='dark') { await api.ubuntuSetTheme(t) }
-                  // 軽い再起動: UI をリロード
-                  setTimeout(()=>location.reload(), 200); 
-                }}>保存して環境を再起動</button>
               </>)}
             </div>
           </div>
@@ -336,7 +341,11 @@ function Settings() {
                   document.documentElement.style.setProperty('--desktop-wallpaper', cssVal)
                   // 即時保存して次回起動時も反映
                   try { 
-                    await api.setSettings({ ...draft, wallpaper: picked })
+                    const next = { ...draft, wallpaper: picked }
+                    await api.setSettings(next)
+                    // 全ウィンドウへ即時通知
+                    try { await api.emitGlobalEvent('sis:wallpaper-changed', { css: cssVal }) } catch {}
+                    try { await api.emitGlobalEvent('sis:settings-saved', next) } catch {}
                     console.log('Wallpaper settings saved')
                   } catch (e) { 
                     console.error('Failed to save wallpaper settings:', e)
@@ -345,7 +354,12 @@ function Settings() {
                 <button className="game-btn secondary" onClick={async()=>{
                   setDraft((p:any)=>({ ...p, wallpaper: '' }))
                   document.documentElement.style.removeProperty('--desktop-wallpaper')
-                  try { await api.setSettings({ ...draft, wallpaper: '' }) } catch {}
+                  try { 
+                    const next = { ...draft, wallpaper: '' }
+                    await api.setSettings(next)
+                    try { await api.emitGlobalEvent('sis:wallpaper-changed', { css: '' }) } catch {}
+                    try { await api.emitGlobalEvent('sis:settings-saved', next) } catch {}
+                  } catch {}
                 }}>クリア</button>
                 <button className="game-btn primary" onClick={async()=>{
                   if (!draft.wallpaper) return
@@ -355,6 +369,8 @@ function Settings() {
                     console.log('Manual CSS value:', cssVal)
                     document.documentElement.style.setProperty('--desktop-wallpaper', cssVal)
                     await api.setSettings(draft)
+                    try { await api.emitGlobalEvent('sis:wallpaper-changed', { css: cssVal }) } catch {}
+                    try { await api.emitGlobalEvent('sis:settings-saved', draft) } catch {}
                     console.log('Manual wallpaper applied and saved')
                   } catch (e) {
                     console.error('Failed to apply wallpaper:', e)

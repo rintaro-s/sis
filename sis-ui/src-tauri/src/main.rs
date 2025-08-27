@@ -1594,6 +1594,48 @@ fn main() {
                 let _ = main.show();
             }
 
+            // Enforce single Sidebar instance on X11 by closing duplicates (rare race conditions)
+            #[cfg(target_os = "linux")]
+            {
+                let is_x11_env = std::env::var("WAYLAND_DISPLAY").is_err() && std::env::var("DISPLAY").is_ok();
+                if is_x11_env && which("wmctrl") && which("xprop") {
+                    std::thread::spawn(|| {
+                        // helper: list sidebar window IDs owned by current process
+                        fn sidebar_ids_for_self() -> Vec<String> {
+                            let mut ids: Vec<String> = Vec::new();
+                            let me = std::process::id();
+                            if let Some(list) = run_out("sh", &["-lc", "wmctrl -lx 2>/dev/null"]) {
+                                for line in list.lines() {
+                                    // Expected: ID DESKTOP HOST WM_CLASS TITLE
+                                    // Filter by title 'SIS Sidebar' for safety
+                                    if !line.contains("SIS Sidebar") { continue; }
+                                    if let Some(id) = line.split_whitespace().next() {
+                                        // Verify PID belongs to us
+                                        if let Some(pid) = xprop_window_pid(id) {
+                                            if pid == me { ids.push(id.to_string()); }
+                                        }
+                                    }
+                                }
+                            }
+                            ids
+                        }
+
+                        for _ in 0..10 { // try for ~2s
+                            let mut ids = sidebar_ids_for_self();
+                            if ids.len() <= 1 { break; }
+                            ids.sort();
+                            // keep the first, close the rest
+                            for id in ids.into_iter().skip(1) {
+                                let cmd = format!("wmctrl -ic {} || true", id);
+                                let _ = std::process::Command::new("sh").arg("-lc").arg(&cmd).status();
+                                log_append("WARN", &format!("closed duplicate sidebar window id={}", id));
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(200));
+                        }
+                    });
+                }
+            }
+
             // Handle first-instance CLI flags too（argsは先で取得済み）
             if args.iter().any(|a| a == "--toggle-terminal") {
                 let _ = app.emit("sis:toggle-builtin-terminal", "toggle");
@@ -1771,6 +1813,9 @@ fn main() {
             set_wallpaper,
             get_settings,
             set_settings,
+            ubuntu_set_theme,
+            ubuntu_system_settings,
+            ubuntu_software_center,
             try_start_lmstudio,
             get_favorite_apps,
             add_favorite_app,
@@ -2386,6 +2431,8 @@ struct DeSettings {
     wallpaper: Option<String>,        // path or data/url(...)
     // Frontendで使用する見た目設定一式（dockOpacity/dockBlur/dockIcon/appIcon など）
     appearance: Option<serde_json::Value>,
+    // 設定の改訂番号（各セットでインクリメントして同期の整合性を高める）
+    rev: Option<u64>,
     llm_remote_url: Option<String>,
     llm_api_key: Option<String>,
     llm_model: Option<String>,
@@ -2413,7 +2460,8 @@ fn read_settings() -> DeSettings {
     DeSettings{ 
         theme: Some("system".into()),
         wallpaper: None,
-    appearance: None,
+        appearance: None,
+        rev: Some(0),
         llm_remote_url: Some("http://localhost:1234/v1/chat/completions".into()),
         llm_api_key: None,
         llm_model: Some("qwen3-14b@q4_k_m".into()),
@@ -2439,7 +2487,7 @@ fn write_settings(s: &DeSettings) {
 fn get_settings() -> Result<DeSettings, String> { Ok(read_settings()) }
 
 #[tauri::command]
-fn set_settings(new_s: DeSettings) -> Result<String, String> {
+fn set_settings(app_handle: tauri::AppHandle, new_s: DeSettings) -> Result<String, String> {
     // Merge with existing settings to avoid dropping fields
     let mut cur = read_settings();
     // Primitive merge: prefer incoming if Some/true; keep existing otherwise
@@ -2457,7 +2505,12 @@ fn set_settings(new_s: DeSettings) -> Result<String, String> {
     if let Some(v) = new_s.app_sort { cur.app_sort = Some(v); }
     if let Some(v) = new_s.favorite_order { cur.favorite_order = Some(v); }
     if let Some(v) = new_s.logging_enabled { cur.logging_enabled = Some(v); }
+    // 改訂番号をインクリメント
+    let next_rev = cur.rev.unwrap_or(0).saturating_add(1);
+    cur.rev = Some(next_rev);
     write_settings(&cur);
+    // 通知: すべてのWebviewへ保存済み設定をブロードキャスト
+    let _ = app_handle.emit("sis:settings-saved", &cur);
     // Optional: auto-start LM Studio if localhost specified
     if cur.llm_autostart_localhost {
         if let Some(url) = &cur.llm_remote_url {
@@ -2467,6 +2520,40 @@ fn set_settings(new_s: DeSettings) -> Result<String, String> {
         }
     }
     Ok("settings-updated".into())
+}
+
+#[tauri::command]
+fn ubuntu_set_theme(theme: String) -> Result<String, String> {
+    // Best-effort GNOME color-scheme; also try legacy gtk-theme naming
+    let t = theme.to_lowercase();
+    if which("gsettings") {
+        let _ = Command::new("gsettings")
+            .arg("set").arg("org.gnome.desktop.interface").arg("color-scheme")
+            .arg(if t=="light" { "prefer-light" } else { "prefer-dark" })
+            .status();
+        // try to toggle gtk-theme suffix -dark if available
+        let _ = Command::new("sh").arg("-lc").arg(
+            if t=="light" {
+                r#"cur=$(gsettings get org.gnome.desktop.interface gtk-theme | tr -d '"' | sed 's/-dark$//'); gsettings set org.gnome.desktop.interface gtk-theme "$cur" || true"#
+            } else {
+                r#"cur=$(gsettings get org.gnome.desktop.interface gtk-theme | tr -d '"' | sed 's/-dark$//'); gsettings set org.gnome.desktop.interface gtk-theme "${cur}-dark" || true"#
+            }
+        ).status();
+        return Ok("gnome-theme-updated".into());
+    }
+    Err("gsettings-not-found".into())
+}
+
+#[tauri::command]
+fn ubuntu_system_settings() -> Result<String, String> {
+    let _ = Command::new("sh").arg("-lc").arg("(gnome-control-center >/dev/null 2>&1 & disown) || true").status();
+    Ok("spawned".into())
+}
+
+#[tauri::command]
+fn ubuntu_software_center() -> Result<String, String> {
+    let _ = Command::new("sh").arg("-lc").arg("(gnome-software >/dev/null 2>&1 & disown) || true").status();
+    Ok("spawned".into())
 }
 
 #[tauri::command]

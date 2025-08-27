@@ -81,8 +81,23 @@ function HomeScreen() {
       for (const f of need.slice(0, 40)) { // 上限を抑制
         try {
           const url = await api.fileToDataUrl(f.path)
-          entries.push([f.path, url])
-        } catch {}
+          if (url && url.startsWith('data:')) {
+            entries.push([f.path, url])
+          }
+        } catch (err) {
+          console.warn('Failed to load preview for', f.path, err)
+          // フォールバック: convertFileSrc → file:// の順に試す
+          try {
+            const core = await import('@tauri-apps/api/core')
+            const url = core.convertFileSrc(f.path)
+            if (url) entries.push([f.path, url])
+            continue
+          } catch {}
+          try {
+            const fileUrl = f.path.startsWith('file://') ? f.path : `file://${f.path}`
+            entries.push([f.path, fileUrl])
+          } catch {}
+        }
       }
       if (!cancelled && entries.length) {
         setThumbs(prev=>{ const next={...prev}; for (const [k,v] of entries) next[k]=v; return next })
@@ -211,20 +226,23 @@ function HomeScreen() {
                     <div className="file-glyph">📁</div>
                   ) : /\.(png|jpg|jpeg|gif|webp|bmp|svg)$/i.test(file.name) ? (
                     <img
-                      src={thumbs[file.path] || ("file://" + file.path)}
+                      src={thumbs[file.path] || ('file://' + file.path)}
                       alt="preview"
                       loading="lazy"
                       decoding="async"
                       onError={(e)=>{ 
-                        // 一度だけ file:// → dataURL の順に試す。両方失敗なら非表示。
+                        // 一度だけ convertFileSrc → file:// の順に試す。両方失敗なら非表示（フォールバックグリフに任せる）
                         const img = e.target as HTMLImageElement
                         const current = img.getAttribute('data-fallback') || ''
                         if (!current && !thumbs[file.path]) {
-                          img.setAttribute('data-fallback', 'file')
-                          img.src = 'file://' + file.path
-                        } else {
-                          img.style.display='none'
-                        }
+                          try {
+                            img.setAttribute('data-fallback', 'convert')
+                            import('@tauri-apps/api/core').then(mod=>{ try { img.src = mod.convertFileSrc(file.path) } catch { img.src = 'file://' + file.path } })
+                          } catch {
+                            img.setAttribute('data-fallback', 'file')
+                            img.src = 'file://' + file.path
+                          }
+                        } else { img.style.display='none' }
                       }}
                     />
                   ) : (

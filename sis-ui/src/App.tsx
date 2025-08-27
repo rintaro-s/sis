@@ -80,7 +80,7 @@ function App() {
   const saved = await api.getSettings().catch(()=>({theme:'system'} as any));
   const pref = (saved as any)?.theme || localStorage.getItem('sis-theme') || 'dark';
         const apply = pref === 'system' ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : pref;
-        document.documentElement.className = apply === 'light' ? 'light-theme' : 'dark-theme';
+  try { document.body.setAttribute('data-theme', apply==='light'?'light':'dark') } catch {}
   const wp = (saved as any)?.wallpaper;
         if (wp && typeof wp === 'string' && wp.trim()) {
           try {
@@ -96,6 +96,12 @@ function App() {
         }
       } catch {}
     })();
+
+    // テーマ変更イベントも受信して即反映（単一ウィンドウ運用時の強化）
+    const unlistenTheme = listen('sis:apply-theme', (e:any)=>{
+      const t = e?.payload?.theme
+      if (t==='light' || t==='dark') { try { document.body.setAttribute('data-theme', t==='light'?'light':'dark') } catch {} }
+    })
 
     let mounted = true;
     const probe = async () => {
@@ -119,7 +125,7 @@ function App() {
       }
     };
     probe();
-    return () => { mounted = false };
+  return () => { mounted = false; unlistenTheme.then((f:()=>void)=>f()) };
   }, []);
 
   // オーバーレイ（マルチウィンドウ）動作時は、ベースUIのサイドバー列は不要

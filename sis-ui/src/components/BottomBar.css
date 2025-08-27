@@ -112,6 +112,7 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   animation: tooltip-appear 0.2s ease-out;
   pointer-events: none;
+  z-index: 10000;
 }
 
 @keyframes tooltip-appear {
@@ -339,6 +340,8 @@
   display: flex;
   gap: 8px;
   align-items: center;
+  overflow-x: auto;
+  padding: 0 8px;
 }
 
 .quick-btn {
