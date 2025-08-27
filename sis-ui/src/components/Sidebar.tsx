@@ -14,14 +14,17 @@ function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
 
   useEffect(()=>{
     let mounted = true
-    const load = async ()=>{ try { const a = await api.getFavoriteApps(); if(mounted) setFav(a) } catch { if(mounted) setFav([]) } }
+  const load = async ()=>{ try { const a = await api.getFavoriteApps(); if(mounted) setFav(a) } catch { if(mounted) setFav([]) } }
     load()
-    const onFav = ()=> load()
-    window.addEventListener('sis:favorites-updated', onFav)
-    return ()=>{ mounted=false; window.removeEventListener('sis:favorites-updated', onFav) }
+  const onFav = ()=> load()
+  window.addEventListener('sis:favorites-updated', onFav)
+  // Desktop側からのアプリ一覧更新でも反映
+  const onAppsChange = ()=> load()
+  window.addEventListener('sis:apps-refreshed', onAppsChange)
+  return ()=>{ mounted=false; window.removeEventListener('sis:favorites-updated', onFav); window.removeEventListener('sis:apps-refreshed', onAppsChange) }
   },[])
 
-  const unpin = async (name: string)=>{ const r=await api.removeFavoriteApp(name); if(r.ok){ const list=await api.getFavoriteApps(); setFav(list) } }
+  const unpin = async (name: string)=>{ const r=await api.removeFavoriteApp(name); if(r.ok){ const list=await api.getFavoriteApps(); setFav(list); window.dispatchEvent(new Event('sis:favorites-updated')) } }
 
   const sections = [
     { id: 'pinned', icon: 'PIN', label: 'ピン留め', count: fav.length },
@@ -77,7 +80,7 @@ function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
             <h3>クイックアクション</h3>
           </div>
           <div className="quick-actions">
-            <button className="qa-btn" onClick={() => window.dispatchEvent(new Event('sis:open-settings'))}>
+            <button className="qa-btn" onClick={async () => { const r = await api.openSettingsWindow(); if(!r.ok){ window.dispatchEvent(new Event('sis:open-settings')) } }}>
               設定を開く
             </button>
             <button

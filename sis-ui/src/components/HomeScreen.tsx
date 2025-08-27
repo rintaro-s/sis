@@ -6,6 +6,7 @@ function HomeScreen() {
   const [apps, setApps] = useState<AppInfo[]>([]);
   const [favorites, setFavorites] = useState<AppInfo[]>([]);
   const [desktopFiles, setDesktopFiles] = useState<{ name: string; path: string; is_dir?: boolean }[]>([]);
+  const [thumbs, setThumbs] = useState<Record<string, string>>({})
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -58,7 +59,7 @@ function HomeScreen() {
       }
     };
 
-    loadData();
+  loadData().then(()=>{ try { window.dispatchEvent(new Event('sis:apps-refreshed')) } catch {} })
     const interval = setInterval(loadData, 8000);
     
     return () => {
@@ -67,6 +68,28 @@ function HomeScreen() {
       clearInterval(tick)
     };
   }, []);
+
+  // デスクトップ画像のサムネを data URL 化して読み込み安定性を向上
+  useEffect(() => {
+    let cancelled = false
+    ;(async()=>{
+      const need = desktopFiles
+        .filter(f=>!f.is_dir && /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name))
+        .filter(f=>!thumbs[f.path])
+      if (need.length === 0) return
+      const entries: Array<[string,string]> = []
+      for (const f of need.slice(0, 40)) { // 上限を抑制
+        try {
+          const url = await api.fileToDataUrl(f.path)
+          entries.push([f.path, url])
+        } catch {}
+      }
+      if (!cancelled && entries.length) {
+        setThumbs(prev=>{ const next={...prev}; for (const [k,v] of entries) next[k]=v; return next })
+      }
+    })()
+    return ()=>{ cancelled = true }
+  }, [desktopFiles])
 
   const openFile = (path: string) => { api.openPath(path) };
 
@@ -83,7 +106,7 @@ function HomeScreen() {
   // 設定はSidebarのクイックアクションに移動
 
   return (
-    <div className="futuristic-home">
+    <div className="futuristic-home" style={{ paddingBottom: 'var(--sis-dock-height, 68px)' }}>
   {/* 壁紙はApp側で一元適用 */}
       
       {/* ウェルカムセクション */}
@@ -187,7 +210,23 @@ function HomeScreen() {
                   {file.is_dir ? (
                     <div className="file-glyph">📁</div>
                   ) : /\.(png|jpg|jpeg|gif|webp|bmp|svg)$/i.test(file.name) ? (
-                    <img src={"file://" + file.path} alt="preview" onError={(e)=>{ (e.target as HTMLImageElement).style.display='none' }} />
+                    <img
+                      src={thumbs[file.path] || ("file://" + file.path)}
+                      alt="preview"
+                      loading="lazy"
+                      decoding="async"
+                      onError={(e)=>{ 
+                        // 一度だけ file:// → dataURL の順に試す。両方失敗なら非表示。
+                        const img = e.target as HTMLImageElement
+                        const current = img.getAttribute('data-fallback') || ''
+                        if (!current && !thumbs[file.path]) {
+                          img.setAttribute('data-fallback', 'file')
+                          img.src = 'file://' + file.path
+                        } else {
+                          img.style.display='none'
+                        }
+                      }}
+                    />
                   ) : (
                     <div className="file-glyph">📄</div>
                   )}

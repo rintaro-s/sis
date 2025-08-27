@@ -122,14 +122,20 @@ function App() {
     return () => { mounted = false };
   }, []);
 
+  // オーバーレイ（マルチウィンドウ）動作時は、ベースUIのサイドバー列は不要
+  const [isOverlayMode, setIsOverlayMode] = useState(false)
+  useEffect(() => { (async()=>{ try { setIsOverlayMode(await api.overlayStatus()) } catch { setIsOverlayMode(false) } })() }, [])
+
   return (
-    <div className={`app-container ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <div className={`app-container ${isSidebarCollapsed ? 'sidebar-collapsed' : ''} ${isOverlayMode ? 'no-sidebar' : ''}`}>
       {backendError && (
         <div className="error-banner">
           {backendError} — 設定やコマンドは無効です。アプリ一覧は取得できません。
         </div>
       )}
-      <Sidebar isCollapsed={isSidebarCollapsed} onToggle={() => setIsSidebarCollapsed(p => !p)} />
+      {!isOverlayMode && (
+        <Sidebar isCollapsed={isSidebarCollapsed} onToggle={() => setIsSidebarCollapsed(p => !p)} />
+      )}
       <main className="main-content">
         <HomeScreen />
       </main>

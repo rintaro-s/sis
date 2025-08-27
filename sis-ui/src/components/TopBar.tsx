@@ -66,7 +66,7 @@ function TopBar() {
   };
 
   return (
-    <div className="futuristic-topbar">
+    <div className="futuristic-topbar" style={{ pointerEvents: 'auto' }}>
       {/* システム情報パネル */}
       <div className="system-status">
         <div className="status-item">

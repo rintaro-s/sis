@@ -2,7 +2,17 @@ import { useEffect, useState } from 'react'
 import { api } from '../services/api'
 import './Settings.css'
 
-const DEFAULT_SETTINGS = { theme: 'system', wallpaper: '', user_dirs: { desktop: '', documents: '', downloads: '', music: '', pictures: '', videos: '' } }
+const DEFAULT_SETTINGS = { 
+  theme: 'system', 
+  wallpaper: '', 
+  user_dirs: { desktop: '', documents: '', downloads: '', music: '', pictures: '', videos: '' },
+  appearance: {
+    dockOpacity: 0.95,
+    dockBlur: 20,
+    dockIcon: 56,
+    appIcon: 80
+  }
+}
 
 function Settings() {
   const [settings, setSettings] = useState<any>({})
@@ -24,6 +34,19 @@ function Settings() {
       const merged = { ...DEFAULT_SETTINGS, ...saved }
       try { const xdg = await api.getXdgUserDirs(); merged.user_dirs = { ...merged.user_dirs, ...xdg } } catch {}
   setSettings(merged); setDraft(JSON.parse(JSON.stringify(merged)))
+  // 外観のCSS変数を反映
+  try {
+    const ap = merged.appearance || {}
+    const r = (v:number, min:number, max:number)=>Math.max(min, Math.min(max, v))
+    const op = r(Number(ap?.dockOpacity ?? 0.95), 0, 1)
+    const bl = r(Number(ap?.dockBlur ?? 20), 0, 60)
+    const di = r(Number(ap?.dockIcon ?? 56), 32, 96)
+    const ai = r(Number(ap?.appIcon ?? 80), 48, 128)
+    document.documentElement.style.setProperty('--sis-dock-opacity', String(op))
+    document.documentElement.style.setProperty('--sis-dock-blur', `${bl}px`)
+    document.documentElement.style.setProperty('--sis-dock-icon', `${di}px`)
+    document.documentElement.style.setProperty('--sis-app-icon', `${ai}px`)
+  } catch {}
   setLoggingEnabled(!!merged.logging_enabled)
   // ディレクトリ一覧能力チェックは不要
       
@@ -94,20 +117,42 @@ function Settings() {
   const applied = theme === 'system' ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme
   document.documentElement.className = applied === 'light' ? 'light-theme' : 'dark-theme'
   localStorage.setItem('sis-theme', applied)
+  // 全ウィンドウへ通知
+  try { await api.emitGlobalEvent('sis:apply-theme', { theme: applied }) } catch {}
   }
+  const applyAppearance = (ap:any)=>{
+    try {
+      const r = (v:number, min:number, max:number)=>Math.max(min, Math.min(max, v))
+      const op = r(Number(ap?.dockOpacity ?? 0.95), 0, 1)
+      const bl = r(Number(ap?.dockBlur ?? 20), 0, 60)
+      const di = r(Number(ap?.dockIcon ?? 56), 32, 96)
+      const ai = r(Number(ap?.appIcon ?? 80), 48, 128)
+      document.documentElement.style.setProperty('--sis-dock-opacity', String(op))
+      document.documentElement.style.setProperty('--sis-dock-blur', `${bl}px`)
+      document.documentElement.style.setProperty('--sis-dock-icon', `${di}px`)
+  document.documentElement.style.setProperty('--sis-app-icon', `${ai}px`)
+  // 全ウィンドウへ通知
+  ;(async()=>{ try { await api.emitGlobalEvent('sis:appearance-changed', { dockOpacity: op, dockBlur: bl, dockIcon: di, appIcon: ai }) } catch {} })()
+    } catch {}
+  }
+
   const save = async () => { try { 
     await api.setSettings(draft); 
     setSettings(JSON.parse(JSON.stringify(draft))); 
     setIsDirty(false); 
     localStorage.setItem('sis-ui-settings-backup', JSON.stringify(draft))
+    // 外観の即時反映
+    applyAppearance(draft.appearance)
     // 壁紙の即時適用（CSS変数に設定）
     if (draft.wallpaper) {
       const v = draft.wallpaper.trim()
       const isUrlFunc = /^url\(/i.test(v)
       const cssVal = isUrlFunc ? v : `url('${v}')`
       document.documentElement.style.setProperty('--desktop-wallpaper', cssVal)
+      try { await api.emitGlobalEvent('sis:wallpaper-changed', { css: cssVal }) } catch {}
     } else {
       document.documentElement.style.removeProperty('--desktop-wallpaper')
+      try { await api.emitGlobalEvent('sis:wallpaper-changed', { css: '' }) } catch {}
     }
   } catch { alert('保存に失敗しました') } }
 
@@ -246,6 +291,34 @@ function Settings() {
                 {['system','light','dark'].map(t=> (
                   <button key={t} className={`game-btn ${draft.theme===t?'primary':'secondary'}`} onClick={()=>applyTheme(t)}>{t==='system'?'システム':t==='light'?'ライト':'ダーク'}</button>
                 ))}
+              </div>
+            </div>
+            <div className="setting-group">
+              <label className="setting-label">Dock 透明度</label>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <input type="range" min={0} max={1} step={0.01} value={draft.appearance?.dockOpacity ?? 0.95} onChange={(e)=>{ const v=parseFloat(e.target.value); setDraft((p:any)=>({ ...p, appearance:{ ...p.appearance, dockOpacity:v }})); applyAppearance({ ...draft.appearance, dockOpacity:v }) }} />
+                <span style={{ width:40, textAlign:'right' }}>{Math.round(100*(draft.appearance?.dockOpacity ?? 0.95))}%</span>
+              </div>
+            </div>
+            <div className="setting-group">
+              <label className="setting-label">Dock ブラー(px)</label>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <input type="range" min={0} max={60} step={1} value={draft.appearance?.dockBlur ?? 20} onChange={(e)=>{ const v=parseInt(e.target.value); setDraft((p:any)=>({ ...p, appearance:{ ...p.appearance, dockBlur:v }})); applyAppearance({ ...draft.appearance, dockBlur:v }) }} />
+                <span style={{ width:40, textAlign:'right' }}>{draft.appearance?.dockBlur ?? 20}px</span>
+              </div>
+            </div>
+            <div className="setting-group">
+              <label className="setting-label">Dock アイコンサイズ(px)</label>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <input type="range" min={32} max={96} step={2} value={draft.appearance?.dockIcon ?? 56} onChange={(e)=>{ const v=parseInt(e.target.value); setDraft((p:any)=>({ ...p, appearance:{ ...p.appearance, dockIcon:v }})); applyAppearance({ ...draft.appearance, dockIcon:v }) }} />
+                <span style={{ width:40, textAlign:'right' }}>{draft.appearance?.dockIcon ?? 56}px</span>
+              </div>
+            </div>
+            <div className="setting-group">
+              <label className="setting-label">アプリ一覧のアイコン(px)</label>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <input type="range" min={48} max={128} step={4} value={draft.appearance?.appIcon ?? 80} onChange={(e)=>{ const v=parseInt(e.target.value); setDraft((p:any)=>({ ...p, appearance:{ ...p.appearance, appIcon:v }})); applyAppearance({ ...draft.appearance, appIcon:v }) }} />
+                <span style={{ width:40, textAlign:'right' }}>{draft.appearance?.appIcon ?? 80}px</span>
               </div>
             </div>
             <div className="setting-group">

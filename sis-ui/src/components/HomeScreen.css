@@ -6,6 +6,19 @@
   background: transparent;
 }
 
+/* 初期描画時のちらつきを抑えるため、入場アニメーションを無効化 */
+.apps-grid .app-item,
+.files-grid .file-card {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* サムネイルのサイズが確定するまでの間のレイアウトシフトを最小化 */
+.file-thumb img {
+  content-visibility: auto;
+  contain-intrinsic-size: 84px 62px; /* .file-thumb と合わせる */
+}
+
 /* 壁紙は App.css の .main-content で適用するため削除 */
 
 /* ウェルカムセクション */
@@ -185,9 +198,9 @@
 /* ダッシュボードグリッド */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 20px;
-  max-width: 1400px;
+  max-width: none;
   margin: 0 auto;
 }
 
@@ -240,8 +253,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0,0,0,0.12);
 }
 
 .file-thumb img {
@@ -250,6 +263,9 @@
   object-fit: cover;
   display: block;
 }
+
+/* アプリアイコンのフォールバック（画像が無い場合） */
+
 
 .file-glyph {
   font-size: 28px;
@@ -262,6 +278,7 @@
   font-size: 12px;
   line-height: 1.2;
   color: var(--text-primary);
+  text-shadow: 0 1px 1px rgba(0,0,0,0.08);
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
@@ -313,8 +330,8 @@
 /* アプリグリッド */
 .apps-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(clamp(96px, 10vw, 140px), 1fr));
+  gap: clamp(10px, 1.5vw, 16px);
 }
 
 .app-item {
@@ -322,7 +339,7 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 12px;
+  padding: 8px 12px 12px;
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -350,8 +367,12 @@
 
 .app-icon-wrapper {
   position: relative;
-  width: 40px;
-  height: 40px;
+  width: var(--sis-app-icon, clamp(64px, 5vw, 96px));
+  height: var(--sis-app-icon, clamp(64px, 5vw, 96px));
+  /* クリック当たり判定を広げる */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .app-icon {
@@ -381,11 +402,18 @@
 }
 
 .app-name {
-  font-size: 11px;
+  font-size: clamp(11px, 1.2vw, 14px);
   font-weight: 600;
   color: var(--text-primary);
   text-align: center;
-  line-height: 1.2;
+  line-height: 1.25;
+  display: -webkit-box;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+  word-break: break-word;
 }
 
 /* ファイルリスト */

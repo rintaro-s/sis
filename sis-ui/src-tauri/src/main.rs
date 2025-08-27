@@ -1159,6 +1159,15 @@ fn get_open_windows_with_icons() -> Result<Vec<WindowInfo>, String> {
                 log_append("INFO", &format!("xprop WM_CLASS: id={} wm_class={}", id, xw));
                 wclass = xw;
             }
+            // Exclude SIS-owned windows from listing (avoid showing in Dock/app list)
+            let wcl_l = wclass.to_lowercase();
+            let ttl_l = title.to_lowercase();
+            if ttl_l.contains("sis desktop") || ttl_l.contains("sis dock") || ttl_l.contains("sis sidebar") || ttl_l.contains("sis topbar") || ttl_l.contains("sis settings") {
+                continue;
+            }
+            if wcl_l.contains("sis") {
+                continue;
+            }
             let mut icon: Option<String> = None;
             match resolve_window_icon(id.clone(), wclass.clone(), title.clone()) {
                 Ok(app) => { icon = app.icon_data_url; log_append("INFO", &format!("get_open_windows_with_icons: icon ok id={} title={} has_icon={}", id, title, icon.is_some())); }
@@ -1439,7 +1448,9 @@ fn main() {
                     (1920, 1080)
                 };
                 let (W, H) = read_wh();
-                let TOP: u32 = 48; let DOCK: u32 = 64; let SIDE: u32 = 280;
+                // Xorgかどうか（Wayland未検出かつDISPLAYがある）
+                let is_x11_env = std::env::var("WAYLAND_DISPLAY").is_err() && std::env::var("DISPLAY").is_ok();
+                let TOP: u32 = 48; let DOCK: u32 = 68; let SIDE: u32 = 280;
                 if app.get_webview_window("desktop").is_none() {
                     let _ = WebviewWindowBuilder::new(app, "desktop", url.clone())
                         .title("SIS Desktop")
@@ -1452,18 +1463,21 @@ fn main() {
                         .inner_size(W as f64, H as f64)
                         .build();
                 }
-                if app.get_webview_window("topbar").is_none() {
-                    let _ = WebviewWindowBuilder::new(app, "topbar", url.clone())
-                        .title("SIS TopBar")
-                        .decorations(false)
-                        .resizable(true)
-                        .min_inner_size(1.0, 1.0)
-                        .max_inner_size(100000.0, 100000.0)
-                        .transparent(true)
-                        .always_on_top(true)
-                        .skip_taskbar(true)
-                        .inner_size(W as f64, TOP as f64)
-                        .build();
+                // Xorg では GNOME のパネルと競合しやすいため TopBar は生成しない
+                if !is_x11_env {
+                    if app.get_webview_window("topbar").is_none() {
+                        let _ = WebviewWindowBuilder::new(app, "topbar", url.clone())
+                            .title("SIS TopBar")
+                            .decorations(false)
+                            .resizable(true)
+                            .min_inner_size(1.0, 1.0)
+                            .max_inner_size(100000.0, 100000.0)
+                            .transparent(true)
+                            .always_on_top(false)
+                            .skip_taskbar(true)
+                            .inner_size(W as f64, TOP as f64)
+                            .build();
+                    }
                 }
                 if app.get_webview_window("dock").is_none() {
                     let _ = WebviewWindowBuilder::new(app, "dock", url.clone())
@@ -1473,7 +1487,7 @@ fn main() {
                         .min_inner_size(1.0, 1.0)
                         .max_inner_size(100000.0, 100000.0)
                         .transparent(true)
-                        .always_on_top(true)
+                        .always_on_top(false)
                         .skip_taskbar(true)
                         .inner_size(W as f64, DOCK as f64)
                         .build();
@@ -1486,7 +1500,7 @@ fn main() {
                         .min_inner_size(1.0, 1.0)
                         .max_inner_size(100000.0, 100000.0)
                         .transparent(true)
-                        .always_on_top(true)
+                        .always_on_top(false)
                         .skip_taskbar(true)
                         .inner_size(SIDE as f64, H as f64)
                         .build();
@@ -1525,7 +1539,7 @@ fn main() {
                         let _ = w.set_always_on_top(false);
                         let _ = w.set_fullscreen(true);
                     } else {
-                        let _ = w.set_always_on_top(true);
+                        let _ = w.set_always_on_top(false);
                     }
                     // show later after geometry is applied
                     let _ = w.on_window_event(|ev| {
@@ -1550,7 +1564,7 @@ fn main() {
                 (1920, 1080)
             };
             let (screen_w, screen_h) = read_wh();
-            let top_h: i32 = 48; let dock_h: i32 = 64; let side_w: i32 = 280;
+            let top_h: i32 = 48; let dock_h: i32 = 68; let side_w: i32 = 280;
             if app.get_webview_window("desktop").is_some() {
                 if let Some(desk) = app.get_webview_window("desktop") {
                     let _ = desk.set_fullscreen(true);
@@ -1569,8 +1583,8 @@ fn main() {
                     let _ = dock.show();
                 }
                 if let Some(side) = app.get_webview_window("sidebar") {
-                    let _ = side.set_size(tauri::Size::Logical(tauri::LogicalSize::new(side_w as f64, screen_h as f64)));
-                    let _ = side.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(0.0, 0.0)));
+                    let _ = side.set_size(tauri::Size::Logical(tauri::LogicalSize::new(side_w as f64, (screen_h - top_h).max(0) as f64)));
+                    let _ = side.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(0.0, top_h as f64)));
                     let _ = side.show();
                 }
             } else if let Some(main) = app.get_webview_window("main") {
@@ -1612,38 +1626,51 @@ fn main() {
                                                                             W=${WH%x*}
                                                                             H=${WH#*x}
                                                                             [ -z "$W" ] && W=1920; [ -z "$H" ] && H=1080
-                                                                            TOP=48; DOCK=64; SIDE=280; HB=$((H-DOCK))
+                                                                            TOP=48; DOCK=68; SIDE=280; HB=$((H-DOCK))
                                                                             # Desktop as DESKTOP type and fullscreen
                                                                             xprop -name 'SIS Desktop' -f _NET_WM_WINDOW_TYPE 32a -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_DESKTOP || true
                                                                             wmctrl -r 'SIS Desktop' -b add,sticky,below,fullscreen || true
                                                                             wmctrl -r 'SIS Desktop' -e 0,0,0,$W,$H || true
                                                                             xprop -name 'SIS Desktop' -f _NET_WM_STATE 32a -set _NET_WM_STATE _NET_WM_STATE_FULLSCREEN || true
                                                                             # TopBar: size/pos first, then dock + strut + partial
-                                                                            wmctrl -r 'SIS TopBar' -e 0,0,0,$W,$TOP || true
-                                                                            xprop -name 'SIS TopBar' -f _NET_WM_WINDOW_TYPE 32a -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_DOCK || true
-                                                                            xprop -name 'SIS TopBar' -f _NET_WM_STRUT 32c -set _NET_WM_STRUT "0, 0, $TOP, 0" || true
-                                                                            xprop -name 'SIS TopBar' -f _NET_WM_STRUT_PARTIAL 32c -set _NET_WM_STRUT_PARTIAL "0, 0, $TOP, 0, 0, 0, 0, 0, 0, 0, $W, 0" || true
-                                                                            wmctrl -r 'SIS TopBar' -b add,sticky,above || true
-                                                                            wmctrl -r 'SIS TopBar' -e 0,0,0,$W,$TOP || true
-                                                                            # Dock dock + strut bottom + partial
+                                                                            # TopBar はXorgでは生成しないためスキップ
+                                                                            # Dock dock + strut bottom + partial (bottom span across full width)
                                                                             wmctrl -r 'SIS Dock' -e 0,0,$HB,$W,$DOCK || true
                                                                             xprop -name 'SIS Dock' -f _NET_WM_WINDOW_TYPE 32a -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_DOCK || true
                                                                             xprop -name 'SIS Dock' -f _NET_WM_STRUT 32c -set _NET_WM_STRUT "0, 0, 0, $DOCK" || true
-                                                                            xprop -name 'SIS Dock' -f _NET_WM_STRUT_PARTIAL 32c -set _NET_WM_STRUT_PARTIAL "0, 0, 0, $DOCK, 0, 0, 0, 0, 0, 0, $W, $H" || true
-                                                                            wmctrl -r 'SIS Dock' -b add,sticky,above || true
+                                                                            xprop -name 'SIS Dock' -f _NET_WM_STATE 32a -set _NET_WM_STATE "_NET_WM_STATE_ABOVE, _NET_WM_STATE_SKIP_TASKBAR, _NET_WM_STATE_SKIP_PAGER" || true
+                                                                            xprop -name 'SIS Dock' -f _NET_WM_STRUT_PARTIAL 32c -set _NET_WM_STRUT_PARTIAL "0, 0, 0, $DOCK, 0, 0, 0, 0, 0, 0, 0, $W" || true
+                                                                            wmctrl -r 'SIS Dock' -b add,sticky,above,skip_taskbar,skip_pager || true
                                                                             wmctrl -r 'SIS Dock' -e 0,0,$HB,$W,$DOCK || true
-                                                                            # Sidebar dock + strut left + partial
-                                                                            wmctrl -r 'SIS Sidebar' -e 0,0,0,$SIDE,$H || true
+                                                                            # Sidebar dock + strut left + partial（実測幅を優先）
+                                                                            SB=$(xwininfo -name 'SIS Sidebar' 2>/dev/null | awk '/Width:/ {print $2; exit}')
+                                                                            [ -z "$SB" ] && SB=$SIDE
+                                                                            wmctrl -r 'SIS Sidebar' -e 0,0,$TOP,$SB,$((H-TOP)) || true
                                                                             xprop -name 'SIS Sidebar' -f _NET_WM_WINDOW_TYPE 32a -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_DOCK || true
-                                                                            xprop -name 'SIS Sidebar' -f _NET_WM_STRUT 32c -set _NET_WM_STRUT "$SIDE, 0, 0, 0" || true
-                                                                            xprop -name 'SIS Sidebar' -f _NET_WM_STRUT_PARTIAL 32c -set _NET_WM_STRUT_PARTIAL "$SIDE, 0, 0, 0, 0, 0, 0, 0, 0, $H, 0, 0" || true
-                                                                            wmctrl -r 'SIS Sidebar' -b add,sticky,above || true
-                                                                            wmctrl -r 'SIS Sidebar' -e 0,0,0,$SIDE,$H || true
+                                                                            HANDLE=12
+                                                                            xprop -name 'SIS Sidebar' -f _NET_WM_STRUT 32c -set _NET_WM_STRUT "$HANDLE, 0, 0, 0" || true
+                                                                            xprop -name 'SIS Sidebar' -f _NET_WM_STATE 32a -set _NET_WM_STATE "_NET_WM_STATE_ABOVE, _NET_WM_STATE_SKIP_TASKBAR, _NET_WM_STATE_SKIP_PAGER" || true
+                                                                            # STRUT_PARTIAL fields: left,right,top,bottom, left_start_y,left_end_y,right_start_y,right_end_y, top_start_x,top_end_x,bottom_start_x,bottom_end_x
+                                                                            xprop -name 'SIS Sidebar' -f _NET_WM_STRUT_PARTIAL 32c -set _NET_WM_STRUT_PARTIAL "$HANDLE, 0, 0, 0, $TOP, $H, 0, 0, 0, 0, 0, 0" || true
+                                                                            wmctrl -r 'SIS Sidebar' -b add,sticky,above,skip_taskbar,skip_pager || true
+                                                                            wmctrl -r 'SIS Sidebar' -e 0,0,$TOP,$SB,$((H-TOP)) || true
                                                                             "#
                                                                     ).status();
                                                                     log_append("INFO", &format!("x11 layout applied attempt {}", i+1));
                                                                     std::thread::sleep(std::time::Duration::from_millis(180));
                                                             }
+                                                    });
+                                                    // Watchdog: ensure skip_taskbar/skip_pager/above persist for Dock/Sidebar/Settings for ~1min
+                                                    std::thread::spawn(|| {
+                                                        for _ in 0..60 {
+                                                            let _ = Command::new("sh").arg("-lc").arg("wmctrl -r 'SIS Dock' -b add,skip_taskbar,skip_pager,above || true").status();
+                                                            let _ = Command::new("sh").arg("-lc").arg("xprop -name 'SIS Dock' -f _NET_WM_STATE 32a -set _NET_WM_STATE '_NET_WM_STATE_ABOVE, _NET_WM_STATE_SKIP_TASKBAR, _NET_WM_STATE_SKIP_PAGER' || true").status();
+                                                            let _ = Command::new("sh").arg("-lc").arg("wmctrl -r 'SIS Sidebar' -b add,skip_taskbar,skip_pager,above || true").status();
+                                                            let _ = Command::new("sh").arg("-lc").arg("xprop -name 'SIS Sidebar' -f _NET_WM_STATE 32a -set _NET_WM_STATE '_NET_WM_STATE_ABOVE, _NET_WM_STATE_SKIP_TASKBAR, _NET_WM_STATE_SKIP_PAGER' || true").status();
+                                                            let _ = Command::new("sh").arg("-lc").arg("wmctrl -r 'SIS Settings' -b add,skip_taskbar,skip_pager,above || true").status();
+                                                            let _ = Command::new("sh").arg("-lc").arg("xprop -name 'SIS Settings' -f _NET_WM_STATE 32a -set _NET_WM_STATE '_NET_WM_STATE_ABOVE, _NET_WM_STATE_SKIP_TASKBAR, _NET_WM_STATE_SKIP_PAGER' || true").status();
+                                                            std::thread::sleep(std::time::Duration::from_millis(1000));
+                                                        }
                                                     });
                                         // Best-effort: size/position using current X display dimensions
                                         // Use xdpyinfo to fetch WxH; fall back to xrandr if needed
@@ -1665,28 +1692,29 @@ fn main() {
                                                     W=1920; H=1080
                                                 fi
                                                 TOP=48
-                                                DOCK=64
+                                                DOCK=68
                                                 SIDE=280
                                                 HB=$((H-DOCK))
                                                 # Desktop full area
-                                                wmctrl -r 'SIS Desktop' -b add,sticky,below,fullscreen || true
+                                                wmctrl -r 'SIS Desktop' -b add,sticky,below,fullscreen,skip_taskbar,skip_pager || true
                                                 wmctrl -r 'SIS Desktop' -e 0,0,0,$W,$H || true
                                                 xprop -name 'SIS Desktop' -f _NET_WM_STATE 32a -set _NET_WM_STATE _NET_WM_STATE_FULLSCREEN || true
                                                 # TopBar dock-type + strut top
-                                                wmctrl -r 'SIS TopBar' -b add,sticky,above || true
-                                                xprop -name 'SIS TopBar' -f _NET_WM_WINDOW_TYPE 32a -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_DOCK || true
-                                                xprop -name 'SIS TopBar' -f _NET_WM_STRUT 32c -set _NET_WM_STRUT "0, 0, $TOP, 0" || true
-                                                wmctrl -r 'SIS TopBar' -e 0,0,0,$W,$TOP || true
+                                                # TopBar はXorgでは生成しないためスキップ
                                                 # Dock dock-type + strut bottom
-                                                wmctrl -r 'SIS Dock' -b add,sticky,above || true
+                                                wmctrl -r 'SIS Dock' -b add,sticky,above,skip_taskbar,skip_pager || true
                                                 xprop -name 'SIS Dock' -f _NET_WM_WINDOW_TYPE 32a -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_DOCK || true
                                                 xprop -name 'SIS Dock' -f _NET_WM_STRUT 32c -set _NET_WM_STRUT "0, 0, 0, $DOCK" || true
+                                                xprop -name 'SIS Dock' -f _NET_WM_STATE 32a -set _NET_WM_STATE "_NET_WM_STATE_ABOVE, _NET_WM_STATE_SKIP_TASKBAR, _NET_WM_STATE_SKIP_PAGER" || true
                                                 wmctrl -r 'SIS Dock' -e 0,0,$HB,$W,$DOCK || true
-                                                # Sidebar dock-type + strut left
-                                                wmctrl -r 'SIS Sidebar' -b add,sticky,above || true
+                                                # Sidebar dock-type + left: reserve only thin handle (12px); position under top panel
+                                                wmctrl -r 'SIS Sidebar' -b add,sticky,above,skip_taskbar,skip_pager || true
                                                 xprop -name 'SIS Sidebar' -f _NET_WM_WINDOW_TYPE 32a -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_DOCK || true
-                                                xprop -name 'SIS Sidebar' -f _NET_WM_STRUT 32c -set _NET_WM_STRUT "$SIDE, 0, 0, 0" || true
-                                                wmctrl -r 'SIS Sidebar' -e 0,0,0,$SIDE,$H || true
+                                                HANDLE=12
+                                                xprop -name 'SIS Sidebar' -f _NET_WM_STRUT 32c -set _NET_WM_STRUT "$HANDLE, 0, 0, 0" || true
+                                                xprop -name 'SIS Sidebar' -f _NET_WM_STATE 32a -set _NET_WM_STATE "_NET_WM_STATE_ABOVE, _NET_WM_STATE_SKIP_TASKBAR, _NET_WM_STATE_SKIP_PAGER" || true
+                                                xprop -name 'SIS Sidebar' -f _NET_WM_STRUT_PARTIAL 32c -set _NET_WM_STRUT_PARTIAL "$HANDLE, 0, 0, 0, $TOP, $H, 0, 0, 0, 0, 0, 0" || true
+                                                wmctrl -r 'SIS Sidebar' -e 0,0,$TOP,$SIDE,$((H-TOP)) || true
                                                 # Raise overlays just in case
                                                 wmctrl -a 'SIS TopBar' || true
                                                 wmctrl -a 'SIS Dock' || true
@@ -1694,29 +1722,35 @@ fn main() {
                                                 "#
                                         ).status();
 
-                    let _ = Command::new("sh").arg("-lc").arg("wmctrl -r 'SIS TopBar' -b add,sticky,above || true").status();
-                    let _ = Command::new("sh").arg("-lc").arg("xprop -name 'SIS TopBar' -f _NET_WM_WINDOW_TYPE 32a -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_DOCK || true").status();
-                    // Reserve top strut (height 48)
-                    let _ = Command::new("sh").arg("-lc").arg(
-                        "xprop -name 'SIS TopBar' -f _NET_WM_STRUT 32c -set _NET_WM_STRUT '0, 0, 48, 0' || true"
-                    ).status();
-                    let _ = Command::new("sh").arg("-lc").arg("wmctrl -a 'SIS TopBar' || true").status();
+                    // TopBar はXorgでは生成しないためスキップ
 
-                    let _ = Command::new("sh").arg("-lc").arg("wmctrl -r 'SIS Dock' -b add,sticky,above || true").status();
+                    let _ = Command::new("sh").arg("-lc").arg("wmctrl -r 'SIS Dock' -b add,sticky,above,skip_taskbar,skip_pager || true").status();
                     let _ = Command::new("sh").arg("-lc").arg("xprop -name 'SIS Dock' -f _NET_WM_WINDOW_TYPE 32a -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_DOCK || true").status();
-                    // Reserve bottom strut (height 64)
+                    // Reserve bottom strut (height 68) with PARTIAL span over full width
                     let _ = Command::new("sh").arg("-lc").arg(
-                        "xprop -name 'SIS Dock' -f _NET_WM_STRUT 32c -set _NET_WM_STRUT '0, 0, 0, 64' || true"
+                        "xprop -name 'SIS Dock' -f _NET_WM_STRUT 32c -set _NET_WM_STRUT '0, 0, 0, 68' || true"
+                    ).status();
+                    let _ = Command::new("sh").arg("-lc").arg(
+                        "xprop -name 'SIS Dock' -f _NET_WM_STRUT_PARTIAL 32c -set _NET_WM_STRUT_PARTIAL '0, 0, 0, 68, 0, 0, 0, 0, 0, 0, 0, $(xdpyinfo 2>/dev/null | awk \"/dimensions:/ {print $2}\" | awk -Fx '{print $1}')' || true"
+                    ).status();
+                    let _ = Command::new("sh").arg("-lc").arg(
+                        "xprop -name 'SIS Dock' -f _NET_WM_STATE 32a -set _NET_WM_STATE '_NET_WM_STATE_ABOVE, _NET_WM_STATE_SKIP_TASKBAR, _NET_WM_STATE_SKIP_PAGER' || true"
                     ).status();
                     let _ = Command::new("sh").arg("-lc").arg("wmctrl -a 'SIS Dock' || true").status();
 
-                    let _ = Command::new("sh").arg("-lc").arg("wmctrl -r 'SIS Desktop' -b add,sticky,below,fullscreen || true").status();
+                    let _ = Command::new("sh").arg("-lc").arg("wmctrl -r 'SIS Desktop' -b add,sticky,below,fullscreen,skip_taskbar,skip_pager || true").status();
                     let _ = Command::new("sh").arg("-lc").arg("wmctrl -a 'SIS Desktop' || true").status();
-                    // Sidebar (left, width 280)
-                    let _ = Command::new("sh").arg("-lc").arg("wmctrl -r 'SIS Sidebar' -b add,sticky,above || true").status();
+                    // Sidebar (left, reserve only a thin handle regardless of expanded width)
+                    let _ = Command::new("sh").arg("-lc").arg("wmctrl -r 'SIS Sidebar' -b add,sticky,above,skip_taskbar,skip_pager || true").status();
                     let _ = Command::new("sh").arg("-lc").arg("xprop -name 'SIS Sidebar' -f _NET_WM_WINDOW_TYPE 32a -set _NET_WM_WINDOW_TYPE _NET_WM_WINDOW_TYPE_DOCK || true").status();
                     let _ = Command::new("sh").arg("-lc").arg(
-                        "xprop -name 'SIS Sidebar' -f _NET_WM_STRUT 32c -set _NET_WM_STRUT '280, 0, 0, 0' || true"
+                        "HANDLE=12; xprop -name 'SIS Sidebar' -f _NET_WM_STRUT 32c -set _NET_WM_STRUT \"$HANDLE, 0, 0, 0\" || true"
+                    ).status();
+                    let _ = Command::new("sh").arg("-lc").arg(
+                        "W=$(xdpyinfo 2>/dev/null | awk '/dimensions:/ {print $2}' | awk -Fx '{print $1}'); H=$(xdpyinfo 2>/dev/null | awk '/dimensions:/ {print $2}' | awk -Fx '{print $2}'); TOP=48; LSTART=$TOP; LEND=$((H-1)); HANDLE=12; xprop -name 'SIS Sidebar' -f _NET_WM_STRUT_PARTIAL 32c -set _NET_WM_STRUT_PARTIAL \"$HANDLE, 0, 0, 0, $LSTART, $LEND, 0, 0, 0, 0, 0, 0\" || true"
+                    ).status();
+                    let _ = Command::new("sh").arg("-lc").arg(
+                        "xprop -name 'SIS Sidebar' -f _NET_WM_STATE 32a -set _NET_WM_STATE '_NET_WM_STATE_ABOVE, _NET_WM_STATE_SKIP_TASKBAR, _NET_WM_STATE_SKIP_PAGER' || true"
                     ).status();
                     let _ = Command::new("sh").arg("-lc").arg("wmctrl -a 'SIS Sidebar' || true").status();
                 }
@@ -1768,9 +1802,42 @@ fn main() {
             run_with_sudo,
             clamav_scan,
             kdeconnect_list
+            ,open_settings_window
         ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
+}
+
+#[tauri::command]
+fn open_settings_window(app_handle: tauri::AppHandle) -> Result<String, String> {
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
+    let label = "settings";
+    if app_handle.get_webview_window(label).is_none() {
+        let url = WebviewUrl::App("/".into());
+        let _ = WebviewWindowBuilder::new(&app_handle, label, url)
+            .title("SIS Settings")
+            .decorations(true)
+            .resizable(true)
+            .skip_taskbar(true)
+            .inner_size(980.0, 720.0)
+            .build();
+    }
+    if let Some(w) = app_handle.get_webview_window(label) {
+        let _ = w.set_title("SIS Settings");
+        let _ = w.set_resizable(true);
+        let _ = w.show();
+    }
+    // X11: 上に出し、Dock/Taskbar/Pagerからは非表示
+    let is_x11 = std::env::var("WAYLAND_DISPLAY").is_err() && std::env::var("DISPLAY").is_ok();
+    if is_x11 && which("wmctrl") && which("xprop") {
+        let _ = Command::new("sh").arg("-lc").arg(
+            "wmctrl -r 'SIS Settings' -b add,above,skip_taskbar,skip_pager || true"
+        ).status();
+        let _ = Command::new("sh").arg("-lc").arg(
+            "xprop -name 'SIS Settings' -f _NET_WM_STATE 32a -set _NET_WM_STATE '_NET_WM_STATE_ABOVE, _NET_WM_STATE_SKIP_TASKBAR, _NET_WM_STATE_SKIP_PAGER' || true"
+        ).status();
+    }
+    Ok("settings-shown".into())
 }
 
 #[tauri::command]
@@ -2317,6 +2384,8 @@ struct DeSettings {
     // UI appearance
     theme: Option<String>,            // "system" | "light" | "dark"
     wallpaper: Option<String>,        // path or data/url(...)
+    // Frontendで使用する見た目設定一式（dockOpacity/dockBlur/dockIcon/appIcon など）
+    appearance: Option<serde_json::Value>,
     llm_remote_url: Option<String>,
     llm_api_key: Option<String>,
     llm_model: Option<String>,
@@ -2344,6 +2413,7 @@ fn read_settings() -> DeSettings {
     DeSettings{ 
         theme: Some("system".into()),
         wallpaper: None,
+    appearance: None,
         llm_remote_url: Some("http://localhost:1234/v1/chat/completions".into()),
         llm_api_key: None,
         llm_model: Some("qwen3-14b@q4_k_m".into()),
@@ -2375,6 +2445,7 @@ fn set_settings(new_s: DeSettings) -> Result<String, String> {
     // Primitive merge: prefer incoming if Some/true; keep existing otherwise
     if let Some(v) = new_s.theme { cur.theme = Some(v); }
     if let Some(v) = new_s.wallpaper { cur.wallpaper = Some(v); }
+    if let Some(v) = new_s.appearance { cur.appearance = Some(v); }
     if let Some(v) = new_s.llm_remote_url { cur.llm_remote_url = Some(v); }
     if let Some(v) = new_s.llm_api_key { cur.llm_api_key = Some(v); }
     if let Some(v) = new_s.llm_model { cur.llm_model = Some(v); }

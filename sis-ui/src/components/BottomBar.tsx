@@ -5,11 +5,12 @@ import './BottomBar.css';
 function BottomBar() {
   const [openWindows, setOpenWindows] = useState<{ id: string; wclass: string; title: string; icon_data_url?: string }[]>([]);
   const [recentApps, setRecentApps] = useState<any[]>([]);
+  const [pinned, setPinned] = useState<any[]>([])
   const [hoveredApp, setHoveredApp] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    const load = async () => {
+  const load = async () => {
       try {
         const [wins, apps] = await Promise.all([
           api.getOpenWindows().catch(()=>[]),
@@ -19,9 +20,18 @@ function BottomBar() {
           })
         ])
         if (!mounted) return
-        const w = wins.filter(w=>!!w.title)
-        console.log('Open windows:', w)
-        console.log('Recent apps:', apps)
+        // SIS関連のウィンドウはDockから除外
+        const w = wins.filter(w=>{
+          const t = (w.title||'').toLowerCase();
+          const c = (w.wclass||'').toLowerCase();
+          if (!t) return false
+          return !(
+            t.includes('sis desktop') || t.includes('sis dock') || t.includes('sis sidebar') || t.includes('sis topbar') || t.includes('sis settings') ||
+            c.includes('sis')
+          )
+        })
+  // console.debug('Open windows:', w)
+  // console.debug('Recent apps:', apps)
         setOpenWindows(w)
 
         // 未インデックスのアプリをウィンドウから推定し、最近候補に加える
@@ -48,11 +58,14 @@ function BottomBar() {
   const withoutIcon = merged.filter(a=>!a.icon_data_url)
   const shortlist = [...withIcon, ...withoutIcon].slice(0, 5)
   setRecentApps(shortlist)
+        try { const fav = await api.getFavoriteApps(); setPinned(fav||[]) } catch {}
       } catch {}
     }
     load()
     const iv = setInterval(load, 3000)
-    return ()=>{ mounted = false; clearInterval(iv) }
+    const onFav = ()=> load()
+    window.addEventListener('sis:favorites-updated', onFav)
+    return ()=>{ mounted = false; clearInterval(iv); window.removeEventListener('sis:favorites-updated', onFav) }
   }, []);
 
   const launchApp = async (app: any) => {
@@ -75,7 +88,11 @@ function BottomBar() {
   }, [recentApps, openWindows])
 
   return (
-    <div className="futuristic-dock crystal">
+  <div
+      className="futuristic-dock crystal"
+      style={{ fontSize: 'clamp(10px, 1.2vw, 14px)' }}
+      onMouseLeave={() => setHoveredApp(null)}
+    >
       {/* Dockアイコン（起動中） */}
       <div className="dock-apps">
         {openIcons.map((item: any, index: number) => (
@@ -87,11 +104,12 @@ function BottomBar() {
             onMouseLeave={() => setHoveredApp(null)}
             style={{ animationDelay: `${index * 0.1}s` }}
           >
-            <div className="app-icon-container">
+  <div className="app-icon-container" style={{ width: 'clamp(36px, 3.6vw, 64px)', height: 'clamp(36px, 3.6vw, 64px)' }}>
               <img 
                 src={item.icon || '/vite.svg'} 
                 alt={item.title}
-                className="app-icon"
+        className="app-icon"
+  style={{ width: '92%', height: '92%' }}
               />
             </div>
             {hoveredApp === item.title && (
@@ -117,11 +135,12 @@ function BottomBar() {
             onMouseLeave={() => setHoveredApp(null)}
             style={{ animationDelay: `${index * 0.1}s` }}
           >
-            <div className="app-icon-container">
+  <div className="app-icon-container" style={{ width: 'clamp(36px, 3.6vw, 64px)', height: 'clamp(36px, 3.6vw, 64px)' }}>
               <img 
                 src={item.icon || '/vite.svg'} 
                 alt={item.title}
-                className="app-icon"
+        className="app-icon"
+  style={{ width: '92%', height: '92%' }}
               />
             </div>
             {hoveredApp === item.title && (
@@ -135,8 +154,17 @@ function BottomBar() {
 
       {/* コントロールセンター起動 */}
       <div className="dock-right">
+        {/* ピン留め（固定表示） */}
+        {pinned.slice(0,6).map((a:any)=>(
+          <div key={a.name} className="dock-app" onClick={()=> a.exec && api.launchApp(a.exec)} onMouseEnter={()=> setHoveredApp(a.name)} onMouseLeave={()=> setHoveredApp(null)}>
+            <div className="app-icon-container" style={{ width: 'clamp(32px, 3vw, 56px)', height: 'clamp(32px, 3vw, 56px)' }}>
+              <img src={a.icon_data_url || '/vite.svg'} alt={a.name} className="app-icon" style={{ width: '92%', height: '92%' }} />
+            </div>
+          </div>
+        ))}
+        {/* CCトグル */}
         <button className="quick-btn" title="コントロールセンター" onClick={()=>{
-          window.dispatchEvent(new Event('sis:toggle-cc'))
+          api.emitGlobalEvent('sis:toggle-cc')
         }}>⚙️</button>
       </div>
     </div>

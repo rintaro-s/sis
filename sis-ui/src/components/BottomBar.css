@@ -4,18 +4,20 @@
   align-items: center;
   justify-content: space-between;
   padding: 6px 18px;
-  background: rgba(255, 255, 255, 0.06);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  backdrop-filter: blur(20px) saturate(1.4);
+  --dock-opacity: var(--sis-dock-opacity, 0.95);
+  --dock-blur: var(--sis-dock-blur, 20px);
+  background: var(--dock-bg, linear-gradient(135deg, rgba(255,255,255,calc(var(--dock-opacity)*0.68)), rgba(0,150,255,calc(var(--dock-opacity)*0.28))));
+  -webkit-backdrop-filter: blur(var(--dock-blur)) saturate(1.4);
+  backdrop-filter: blur(var(--dock-blur)) saturate(1.4);
   border-top: 1px solid var(--panel-border);
   box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.08);
-  height: 56px;
+  height: var(--sis-dock-height, 68px);
   position: relative;
   overflow: hidden;
 }
 
 /* 余計な背景演出を削除し、クリアな見た目に */
-.futuristic-dock.crystal { background: rgba(255, 255, 255, 0.06); }
+.futuristic-dock.crystal { background: var(--dock-bg, linear-gradient(135deg, rgba(255,255,255,0.65), rgba(0,150,255,0.28))); }
 
 /* アプリケーションアイコンエリア */
 .dock-apps {
@@ -55,13 +57,13 @@
 
 .app-icon-container {
   position: relative;
-  width: 40px;
-  height: 40px;
+  width: var(--sis-dock-icon, 56px);
+  height: var(--sis-dock-icon, 56px);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 14px;
   box-shadow:
     0 6px 18px rgba(0, 0, 0, 0.15),
@@ -75,8 +77,8 @@
 }
 
 .app-icon {
-  width: 26px;
-  height: 26px;
+  width: calc(var(--sis-dock-icon, 56px) - 10px);
+  height: calc(var(--sis-dock-icon, 56px) - 10px);
   border-radius: 6px;
   object-fit: cover;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
@@ -109,6 +111,7 @@
   white-space: nowrap;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   animation: tooltip-appear 0.2s ease-out;
+  pointer-events: none;
 }
 
 @keyframes tooltip-appear {
@@ -326,9 +329,9 @@
 .dock-separator {
   width: 1px;
   height: 36px;
-  background: rgba(255,255,255,0.18);
-  border-right: 1px solid rgba(0,0,0,0.08);
-  border-left: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.12);
+  border-right: 1px solid rgba(0,0,0,0.06);
+  border-left: 1px solid rgba(255,255,255,0.06);
   border-radius: 1px;
 }
 

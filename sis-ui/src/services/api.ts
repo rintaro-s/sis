@@ -66,6 +66,17 @@ async function safeInvoke<T = unknown>(cmd: string, payload?: Record<string, unk
 }
 
 export const api = {
+  /** すべてのウィンドウに向けてイベントをブロードキャスト（Tauri emit + DOM CustomEvent） */
+  async emitGlobalEvent(name: string, payload?: any): Promise<void> {
+    try {
+      const mod = await import('@tauri-apps/api/event')
+      await mod.emit(name, payload)
+    } catch { /* ignore */ }
+    try {
+      const ev = new CustomEvent(name, { detail: payload })
+      window.dispatchEvent(ev)
+    } catch { /* ignore */ }
+  },
   /** CSSのbackground-imageに安全に使えるURLへ変換（ローカルパス→base64 data URL） */
   async cssUrlForPath(input: string): Promise<string> {
     const v = (input || '').trim()
@@ -273,6 +284,11 @@ export const api = {
   async getSettings(): Promise<any> { try { return await safeInvoke('get_settings') } catch { return {} } },
   async setSettings(s: any): Promise<{ ok: boolean; message?: string }>{
     try { const msg = await safeInvoke<string>('set_settings', { new_s: s }); return { ok: true, message: msg } }
+    catch (e) { return { ok: false, message: (e as Error)?.message } }
+  },
+
+  async openSettingsWindow(): Promise<{ ok: boolean; message?: string }>{
+    try { const msg = await safeInvoke<string>('open_settings_window'); return { ok: true, message: msg } }
     catch (e) { return { ok: false, message: (e as Error)?.message } }
   },
   async tryStartLmStudio(): Promise<{ ok: boolean; message?: string }>{

@@ -98,6 +98,12 @@ body {
   grid-template-columns: 60px 1fr;
 }
 
+/* オーバーレイ（複数ウィンドウ）モードでは左列を無効化し、空白を排除 */
+.app-container.no-sidebar {
+  grid-template-areas: 'main';
+  grid-template-columns: 1fr;
+}
+
 .main-content {
   grid-area: main;
   overflow: auto;
@@ -123,7 +129,7 @@ body {
 
 /* 明示的なレイヤー用（TopBar, BottomBar を単独ウィンドウにも対応）*/
 .topbar-layer { height: 48px; width: 100%; background: rgba(20,20,24,0.6); backdrop-filter: blur(6px); }
-.dock-layer { height: 64px; width: 100%; background: rgba(20,20,24,0.55); backdrop-filter: blur(6px); }
+.dock-layer { height: 68px; width: 100%; background: rgba(20,20,24,0.55); backdrop-filter: blur(6px); }
 
 .modal-overlay {
   position: fixed;

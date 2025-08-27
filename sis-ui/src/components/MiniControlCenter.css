@@ -1,4 +1,4 @@
-.cc-anchor{position:fixed;top:56px;right:12px;z-index:2000;pointer-events:none}
+.cc-anchor{position:fixed;top:68px;right:16px;z-index:2000;pointer-events:none}
 .cc-anchor .cc-panel{opacity:0;transform:translateY(-6px);transition:opacity .12s ease, transform .12s ease}
 .cc-anchor.open{pointer-events:auto}
 .cc-anchor.open .cc-panel{opacity:1;transform:translateY(0)}

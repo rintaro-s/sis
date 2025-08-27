@@ -56,7 +56,9 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   cursor: default;
-  background: var(--bg-void);
+  /* サブウィンドウ（Dock/Sidebar）の背景発色を防ぐためデフォルトは透明。
+    デスクトップ本体はインラインstyleで壁紙を描画する。*/
+  background: transparent;
   overflow: hidden;
   color: var(--text-primary);
   font-weight: 400;
