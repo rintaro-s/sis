@@ -7,9 +7,10 @@ function TopBar() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
+  const [mdm, setMdm] = useState<{ monitoring: { screen: boolean; web_history: boolean; images: boolean; files: boolean } } | null>(null);
 
   useEffect(() => {
-    const timer = setInterval(() => { 
+  const timer = setInterval(() => { 
       setCurrentTime(new Date());
       
       // システム情報を定期的に更新
@@ -37,6 +38,8 @@ function TopBar() {
       }).catch(() => {
         console.warn('バッテリー情報の取得に失敗');
       });
+      // MDM可視化状態を同期
+      api.getMdmStatus().then(setMdm).catch(()=>{})
     }, 2000);
     
     return () => { clearInterval(timer) };
@@ -132,6 +135,17 @@ function TopBar() {
           <span className="notification-icon">通知</span>
           <span className="notification-count">0</span>
         </div>
+        {/* MDM インジケータ */}
+        {mdm && (
+          <div className="notification-badge" title="MDM監視状態">
+            <span className="notification-icon">
+              {mdm.monitoring.screen ? '📷' : '🟢'}
+            </span>
+            <span className="notification-count">
+              {(mdm.monitoring.web_history ? 1 : 0) + (mdm.monitoring.images ? 1 : 0) + (mdm.monitoring.files ? 1 : 0)}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

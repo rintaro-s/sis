@@ -25,6 +25,7 @@ function Settings() {
   const [brightness, setBrightness] = useState(80)
   const [network, setNetwork] = useState(true)
   const [bluetooth, setBluetooth] = useState(true)
+  const [mdm, setMdm] = useState<{ monitoring: { screen: boolean; web_history: boolean; images: boolean; files: boolean }, screen_time: any } | null>(null)
 
   useEffect(() => {
     (async () => {
@@ -66,6 +67,9 @@ function Settings() {
           if (typeof s.network === 'boolean') setNetwork(s.network)
           if (typeof s.bluetooth === 'boolean') setBluetooth(s.bluetooth)
         }).catch(()=>{})
+
+  // MDM 状態
+  api.getMdmStatus().then(setMdm).catch(()=>setMdm(null))
       } catch (error) {
         console.error('設定読み込みエラー:', error)
         setSettings(DEFAULT_SETTINGS)
@@ -264,6 +268,48 @@ function Settings() {
                 placeholder="/path/to/wallpaper.jpg"
               />
             </div>
+          </div>
+        </div>
+
+        {/* MDM / 教室ユーティリティ */}
+        <div className="game-card">
+          <div className="game-card-header">
+            <h3 className="game-card-title">🏫 MDM / 教室ユーティリティ</h3>
+          </div>
+          <div className="settings-section">
+            {mdm ? (
+              <>
+                <div className="info-grid">
+                  <div className="info-item">
+                    <span className="info-label">監視: 画面</span>
+                    <span className={`info-status ${mdm.monitoring.screen ? 'active' : 'inactive'}`}>{mdm.monitoring.screen ? 'ON' : 'OFF'}</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">監視: Web履歴</span>
+                    <span className={`info-status ${mdm.monitoring.web_history ? 'active' : 'inactive'}`}>{mdm.monitoring.web_history ? 'ON' : 'OFF'}</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">監視: 画像メタ</span>
+                    <span className={`info-status ${mdm.monitoring.images ? 'active' : 'inactive'}`}>{mdm.monitoring.images ? 'ON' : 'OFF'}</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">監視: ファイル</span>
+                    <span className={`info-status ${mdm.monitoring.files ? 'active' : 'inactive'}`}>{mdm.monitoring.files ? 'ON' : 'OFF'}</span>
+                  </div>
+                </div>
+                <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button className="game-btn" onClick={() => api.mdmApply()}>ポリシー更新</button>
+                  <button className="game-btn" onClick={() => api.mdmPullFiles()}>配布を受信</button>
+                  <button className="game-btn" onClick={() => api.mdmScreenshot()}>スクリーンショット送信</button>
+                  <button className="game-btn" onClick={async () => {
+                    const p = await api.pickAnyFile()
+                    if (p) await api.mdmSubmitFile(p)
+                  }}>提出...</button>
+                </div>
+              </>
+            ) : (
+              <div className="capability-warning">MDM 状態が取得できません</div>
+            )}
           </div>
         </div>
 

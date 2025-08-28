@@ -99,6 +99,7 @@ $SUDO install -m 0644 "$ROOT_DIR/provisioning/sis.conf" /etc/sis/sis.conf || tru
 for f in mdm-agent.sh remote-wipe.sh profiled.sh pre-update-snapshot.sh setup-dns-filter.sh setup-fscrypt.sh zerotouch-wizard.sh exam-mode.sh screen-record.sh veyon-setup.sh distribute-collect.sh create-accounts.sh setup-sso.sh apply-wifi.sh apply-proxy.sh apply-certs.sh apply-printers.sh apply-restrictions.sh inventory.sh remote-support.sh factory-reset.sh; do
 	$SUDO install -m 0755 "$ROOT_DIR/scripts/$f" "/usr/local/sis/$f"
 done
+$SUDO install -m 0755 "$ROOT_DIR/scripts/install-keybindings.sh" "/usr/local/sis/install-keybindings.sh"
 
 log "[3/11] 監査/ログフックの配置"
 $SUDO install -d -m 0755 /etc/audit/rules.d
@@ -170,13 +171,13 @@ fi
 /usr/local/sis/setup-fscrypt.sh || true
 
 log "[7/11] MDM フックとリモートワイプの設定"
-for u in sis-mdm-agent.service sis-mdm-agent.timer sis-remote-wipe.path sis-remote-wipe.service; do
+for u in sis-mdm-agent.service sis-mdm-agent.timer sis-mdm-poll.service sis-mdm-poll.timer sis-mdm-telemetry.service sis-mdm-telemetry.timer sis-remote-wipe.path sis-remote-wipe.service sis-screentime.service sis-screentime.timer; do
 	$SUDO install -m 0644 "$ROOT_DIR/provisioning/systemd/$u" "/etc/systemd/system/$u"
 done
 $SUDO install -m 0644 "$ROOT_DIR/provisioning/systemd/sis-agent-update.service" /etc/systemd/system/sis-agent-update.service
 $SUDO install -m 0644 "$ROOT_DIR/provisioning/systemd/sis-agent-update.timer" /etc/systemd/system/sis-agent-update.timer
 $SUDO systemctl daemon-reload
-$SUDO systemctl enable --now sis-mdm-agent.timer sis-remote-wipe.path sis-agent-update.timer || true
+$SUDO systemctl enable --now sis-mdm-agent.timer sis-mdm-poll.timer sis-mdm-telemetry.timer sis-screentime.timer sis-remote-wipe.path sis-agent-update.timer || true
 
 log "[8/11] 授業系 (Veyon/試験モード/配布回収の下地)"
 if [[ $WITH_VEYON -eq 1 ]]; then
@@ -205,6 +206,9 @@ log "[11/11] クリーンアップ・最終調整"
 $SUDO systemctl restart rsyslog || true
 $SUDO /usr/local/sis/create-accounts.sh || true
 $SUDO /usr/local/sis/setup-sso.sh || true
+# GNOME の通常モードでもショートカットを配布（自動一回適用: autostart）
+$SUDO install -d -m 0755 /etc/xdg/autostart
+$SUDO install -m 0644 "$ROOT_DIR/provisioning/autostart/sis-keys.desktop" /etc/xdg/autostart/sis-keys.desktop || true
 log "完了: 再起動後に各種ポリシー/フィルタ/監査が有効になります。"
 log "MDM へ登録: /usr/local/sis/mdm-agent.sh enroll を参照。"
 

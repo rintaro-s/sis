@@ -1,2 +1,15 @@
 LLMs/
 LLM/
+build-iso-work/
+# Generated artifacts and large files
+dist/*.iso
+*.pack
+*.idx
+.git/objects/pack/*
+build-iso-work/extract/
+build-iso-work/rootfs/
+**/src-tauri/target/
+**/target/
+**/*.snap
+**/*.deb
+.ssh/

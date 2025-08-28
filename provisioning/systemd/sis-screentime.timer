@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic screen time enforcement
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -21,6 +21,8 @@ import SimpleTerminal from './components/SimpleTerminal'
 import { listen } from '@tauri-apps/api/event'
 import { api } from './services/api'
 import { applyAllToDom, ensureSystemThemeWatcher } from './services/domApply'
+import HaloHud from './components/HaloHud'
+import CircularMenu from './components/CircularMenu'
 
 function useWindowLabel() {
   const [label, setLabel] = useState<string>('');
@@ -43,6 +45,9 @@ function DesktopRoot() {
   const [termOpen, setTermOpen] = useState(false)
   const [termCmd, setTermCmd] = useState<string | undefined>(undefined)
   const [termAutoRun, setTermAutoRun] = useState<boolean>(false)
+  const [haloVisible, setHaloVisible] = useState(false)
+  const [radialOpen, setRadialOpen] = useState(false)
+  const holdRef = useRef<{ key?: string; timer?: number | null }>({ key: undefined, timer: null })
 
   useEffect(() => {
   // OSテーマ変化に追従（system選択時）
@@ -140,7 +145,19 @@ function DesktopRoot() {
     window.addEventListener('sis:toggle-builtin-terminal', toggleBuiltin as any)
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.altKey && e.code === 'Space') { e.preventDefault(); setIsMenuVisible(p=>!p) }
+      // Alt+Space: 短押し=コマンドパレット / 長押し(>450ms)=Halo HUD + 円形メニュー
+      if (e.code === 'Space' && e.altKey) {
+        e.preventDefault()
+        // すでにホールド中なら無視
+        if (!holdRef.current.timer) {
+          holdRef.current.key = 'Alt+Space'
+          holdRef.current.timer = window.setTimeout(() => {
+            setHaloVisible(true)
+            setRadialOpen(true)
+          }, 450) as unknown as number
+        }
+        return
+      }
       if (e.ctrlKey && e.shiftKey && (e.key.toLowerCase() === 'c')) { e.preventDefault(); setCcOpen(p=>!p) }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') { e.preventDefault(); setIsMenuVisible(p => !p) }
   // Ctrl+, was opening settings; now unused
@@ -148,8 +165,31 @@ function DesktopRoot() {
   if (e.code === 'Escape') { setIsMenuVisible(false); setCcOpen(false) }
     }
     window.addEventListener('keydown', onKey)
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        // Alt+Space ホールド判定解除
+        const hadTimer = !!holdRef.current.timer
+        if (holdRef.current.timer) { clearTimeout(holdRef.current.timer as any); holdRef.current.timer = null }
+        if (holdRef.current.key === 'Alt+Space') {
+          // 長押しで既にHUD表示中なら閉じる。短押しならパレットをトグル。
+          if (haloVisible || radialOpen) {
+            setHaloVisible(false)
+            setRadialOpen(false)
+          } else if (hadTimer) {
+            setIsMenuVisible(p => !p)
+          }
+          holdRef.current.key = undefined
+        }
+      }
+    }
+    window.addEventListener('keyup', onKeyUp)
+    // ミドルクリックで即円形メニュー
+    const onMouseDown = (e: MouseEvent) => { if (e.button === 1) { e.preventDefault(); setHaloVisible(true); setRadialOpen(true) } }
+    window.addEventListener('mousedown', onMouseDown)
   return () => { 
-      window.removeEventListener('keydown', onKey);
+  window.removeEventListener('keydown', onKey);
+  window.removeEventListener('keyup', onKeyUp);
+  window.removeEventListener('mousedown', onMouseDown);
   // window.removeEventListener('sis:open-settings', openSettings as any)
       window.removeEventListener('sis:toggle-cc', toggleCc as any)
       window.removeEventListener('sis:open-builtin-terminal', openBuiltinTerm as any)
@@ -176,6 +216,21 @@ function DesktopRoot() {
       <MiniControlCenter open={ccOpen} onClose={()=>setCcOpen(false)} />
       <CommandPalette isVisible={isMenuVisible} onClose={() => setIsMenuVisible(false)} />
       <SimpleTerminal open={termOpen} initialCmd={termCmd} initialAutoRun={termAutoRun} onClose={()=>{ setTermOpen(false); setTermAutoRun(false) }} />
+      {/* Halo HUD + 円形メニュー: 体験の顔 */}
+      <HaloHud visible={haloVisible} onClose={()=>setHaloVisible(false)} onAction={(id)=>{
+        // ライトなアクション路線: 主要IDをハンドリング
+        if (id==='launcher') setIsMenuVisible(true)
+        if (id==='control') setCcOpen(true)
+        if (id==='screen') api.takeScreenshot()
+        if (id==='files') api.launchApp('xdg-open "$HOME"')
+      }} />
+      <CircularMenu isVisible={radialOpen} onClose={()=>{ setRadialOpen(false); setHaloVisible(false) }} />
+      {/* ホットコーナー: 触って分かる導線 */}
+      <div style={{position:'fixed', inset:0, pointerEvents:'none'}}>
+        <div style={{position:'absolute', left:0, top:0, width:32, height:32, pointerEvents:'auto'}} onMouseEnter={()=>setIsMenuVisible(true)} />
+        <div style={{position:'absolute', right:0, bottom:0, width:32, height:32, pointerEvents:'auto'}} onMouseEnter={()=>setCcOpen(true)} />
+        <div style={{position:'absolute', right:0, top:0, width:32, height:32, pointerEvents:'auto'}} onMouseEnter={()=>setTermOpen(true)} />
+      </div>
     </div>
   );
 }
@@ -346,18 +401,23 @@ function SidebarRoot() {
   const width = collapsed ? 12 : 280; // 折りたたみ時は薄いハンドルだけ
         const TOP = 48;
         if (mon?.size) {
-          for (let i=0; i<8; i++) {
-            await w.setSize(new LogicalSize(width, Math.max(0, mon.size.height - TOP)));
-            await w.setPosition(new LogicalPosition(0, TOP));
-            await new Promise(r=>setTimeout(r, 120));
-          }
+          // 即時反映
+          await w.setSize(new LogicalSize(width, Math.max(0, mon.size.height - TOP)));
+          await w.setPosition(new LogicalPosition(0, TOP));
           await invoke('run_safe_command', { cmdline: `wmctrl -r 'SIS Sidebar' -e 0,0,${TOP},${width},${Math.max(0, mon.size.height - TOP)}` }).catch(()=>{});
-                await invoke('run_safe_command', { cmdline: `wmctrl -r 'SIS Sidebar' -b add,skip_taskbar,skip_pager,above || true` }).catch(()=>{});
-          // Reserve only a thin handle (12px) on X11 regardless of expanded width
+          await invoke('run_safe_command', { cmdline: `wmctrl -r 'SIS Sidebar' -b add,skip_taskbar,skip_pager,above || true` }).catch(()=>{});
+          // X11 の strut は薄いハンドル(12px)を確保
           const HANDLE = 12
           await invoke('run_safe_command', { cmdline: `xprop -name 'SIS Sidebar' -f _NET_WM_STRUT 32c -set _NET_WM_STRUT '${HANDLE}, 0, 0, 0'` }).catch(()=>{});
-          // fields: left,right,top,bottom, left_start_y,left_end_y,right_start_y,right_end_y, top_start_x,top_end_x,bottom_start_x,bottom_end_x
           await invoke('run_safe_command', { cmdline: `xprop -name 'SIS Sidebar' -f _NET_WM_STRUT_PARTIAL 32c -set _NET_WM_STRUT_PARTIAL '${HANDLE}, 0, 0, 0, ${TOP}, ${mon.size.height}, 0, 0, 0, 0, 0, 0'` }).catch(()=>{});
+          // 少し後に一度だけ再適用（レイアウト安定化用）
+          setTimeout(async () => {
+            try {
+              await w.setSize(new LogicalSize(width, Math.max(0, mon.size.height - TOP)));
+              await w.setPosition(new LogicalPosition(0, TOP));
+              await invoke('run_safe_command', { cmdline: `wmctrl -r 'SIS Sidebar' -e 0,0,${TOP},${width},${Math.max(0, mon.size.height - TOP)}` }).catch(()=>{});
+            } catch {}
+          }, 120);
         }
   try { await (w as any).setAlwaysOnTop?.(false) } catch {}
         await w.show();
@@ -458,7 +518,7 @@ function SidebarRoot() {
   }, [collapsed]);
   return (
     <div style={{ width: '100%', height: '100vh', background: 'transparent', pointerEvents: 'none' }}>
-      <div style={{ pointerEvents: 'auto', width: '100%', height: '100%' }}>
+      <div style={{ pointerEvents: collapsed ? 'none' : 'auto', width: '100%', height: '100%' }}>
         <Sidebar isCollapsed={collapsed} onToggle={()=>setCollapsed(p=>!p)} />
       </div>
     </div>

@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic SIS MDM poll
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=60s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

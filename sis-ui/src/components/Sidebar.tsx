@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { api, type AppInfo } from '../services/api';
 import './Sidebar.css';
 import './Settings.css';
@@ -13,7 +13,6 @@ function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
   const [activeSection, setActiveSection] = useState('actions');
   const [notifications] = useState<any[]>([]); // 実際の通知がない場合は空配列
   const [fav, setFav] = useState<AppInfo[]>([])
-  const hideTimerRef = useRef<number | null>(null);
 
   useEffect(()=>{
     let mounted = true
@@ -29,55 +28,7 @@ function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
 
   const unpin = async (name: string)=>{ const r=await api.removeFavoriteApp(name); if(r.ok){ const list=await api.getFavoriteApps(); setFav(list); window.dispatchEvent(new Event('sis:favorites-updated')) } }
 
-  const resetHideTimer = () => {
-    if (hideTimerRef.current) {
-      clearTimeout(hideTimerRef.current);
-    }
-    if (!isCollapsed) {
-      hideTimerRef.current = setTimeout(() => {
-        onToggle();
-      }, 5000);
-    }
-  };
-
-  const handleMouseLeave = () => {
-    // サイドバー領域から離れたら即時に非表示
-    if (!isCollapsed) {
-      onToggle();
-    }
-    // 念のためタイマーもクリア
-    if (hideTimerRef.current) {
-      clearTimeout(hideTimerRef.current);
-      hideTimerRef.current = null;
-    }
-  };
-
-  const handleMouseEnter = () => {
-    if (hideTimerRef.current) {
-      clearTimeout(hideTimerRef.current);
-      hideTimerRef.current = null;
-    }
-  };
-
-  const handleInteraction = () => {
-    resetHideTimer();
-  };
-
-  useEffect(() => {
-    if (!isCollapsed) {
-      resetHideTimer();
-    } else {
-      if (hideTimerRef.current) {
-        clearTimeout(hideTimerRef.current);
-        hideTimerRef.current = null;
-      }
-    }
-    return () => {
-      if (hideTimerRef.current) {
-        clearTimeout(hideTimerRef.current);
-      }
-    };
-  }, [isCollapsed]);
+  // このコンポーネントは見た目のみを担い、開閉は親に委ねる
 
   const sections = [
   { id: 'pinned', icon: 'PIN', label: 'ピン留め', count: fav.length },
@@ -89,17 +40,29 @@ function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
   return (
     <aside 
       className={`futuristic-sidebar ${isCollapsed ? 'collapsed' : ''}`}
-      onMouseLeave={handleMouseLeave}
-      onMouseEnter={handleMouseEnter}
-  onMouseMove={handleInteraction}
-      onClick={handleInteraction}
     >
+      {/* 折りたたみ時にだけ表示される薄いクリックハンドル。親で pointer-events: none の場合でも
+          このハンドルは z-index を上げ pointer-events を受け付ける設計 */}
+      {isCollapsed && (
+        <div
+          className="sidebar-collapsed-handle"
+          role="button"
+          aria-label="Open sidebar"
+          onClick={(e) => { e.stopPropagation(); onToggle(); }}
+        />
+      )}
       <div className="sidebar-header">
-        <button className="sidebar-toggle" onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          onToggle();
-        }}>
+        <button
+          className="sidebar-toggle"
+          tabIndex={0}
+          aria-expanded={!isCollapsed}
+          onClick={(e) => {
+            // クリック伝播を抑え、確実にトグル動作だけを行う
+            e.preventDefault();
+            e.stopPropagation();
+            onToggle();
+          }}
+        >
           <span className="toggle-icon">{isCollapsed ? '»' : '«'}</span>
         </button>
         {!isCollapsed && (

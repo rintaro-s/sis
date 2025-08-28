@@ -66,6 +66,32 @@ async function safeInvoke<T = unknown>(cmd: string, payload?: Record<string, unk
 }
 
 export const api = {
+  // --- MDM helpers ---
+  async getMdmStatus(): Promise<{ monitoring: { screen: boolean; web_history: boolean; images: boolean; files: boolean }, screen_time: any }>{
+    try {
+      const cmd = `bash -lc 'cat /var/lib/sis-mdm/policies_view.json 2>/dev/null || echo {}'`
+      const text = await safeInvoke<string>('run_safe_command', { cmdline: cmd })
+      const obj = JSON.parse(text || '{}')
+      const monitoring = obj.monitoring || { screen: false, web_history: false, images: false, files: false }
+      return { monitoring, screen_time: obj.screen_time || {} }
+    } catch { return { monitoring: { screen: false, web_history: false, images: false, files: false }, screen_time: {} } }
+  },
+  async mdmApply(): Promise<{ ok: boolean }>{
+    try { await safeInvoke('run_safe_command', { cmdline: "bash -lc '/usr/local/sis/mdm-agent.sh apply'" }); return { ok: true } } catch { return { ok: false } }
+  },
+  async mdmPullFiles(): Promise<{ ok: boolean }>{
+    try { await safeInvoke('run_safe_command', { cmdline: "bash -lc '/usr/local/sis/mdm-agent.sh pull-files'" }); return { ok: true } } catch { return { ok: false } }
+  },
+  async mdmScreenshot(): Promise<{ ok: boolean }>{
+    try { await safeInvoke('run_safe_command', { cmdline: "bash -lc '/usr/local/sis/mdm-agent.sh screenshot'" }); return { ok: true } } catch { return { ok: false } }
+  },
+  async mdmSubmitFile(path: string): Promise<{ ok: boolean }>{
+    try {
+      const esc = path.replace(/'/g, "'\\''")
+      await safeInvoke('run_safe_command', { cmdline: `bash -lc '/usr/local/sis/mdm-agent.sh submit-file '${esc}''` })
+      return { ok: true }
+    } catch { return { ok: false } }
+  },
   /** すべてのウィンドウに向けてイベントをブロードキャスト（Tauri emit + DOM CustomEvent） */
   async emitGlobalEvent(name: string, payload?: any): Promise<void> {
     try {
@@ -523,6 +549,31 @@ export const api = {
         }
         reader.onerror = () => resolve(null)
         reader.readAsDataURL(file)
+      }
+      input.oncancel = () => resolve(null)
+      input.click()
+    })
+  },
+
+  // 任意ファイル選択（ブラウザinputフォールバックあり）
+  async pickAnyFile(): Promise<string | null> {
+    try {
+      const cmd = `sh -lc '(
+        zenity --file-selection --title="ファイルを選択" 2>/dev/null || \
+        kdialog --getopenfilename "$HOME" "*|すべてのファイル" 2>/dev/null
+      ) | sed -n 1p'`
+      const text = await safeInvoke<string>('run_safe_command', { cmdline: cmd })
+      const p = (text || '').split(/\r?\n/)[0]?.trim()
+      if (p && p.length > 0) return p
+    } catch { /* ignore */ }
+    return await new Promise<string | null>((resolve) => {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.onchange = () => {
+        const file = input.files?.[0]
+        if (!file) return resolve(null)
+        // ブラウザのFileパスは得られないため、このフォールバックはnull
+        resolve(null)
       }
       input.oncancel = () => resolve(null)
       input.click()

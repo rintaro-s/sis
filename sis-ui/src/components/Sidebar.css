@@ -3,7 +3,7 @@
   background: var(--sidebar-bg, rgba(10, 12, 16, 0.22));
   backdrop-filter: blur(14px) saturate(1.5);
   border-right: 2px solid rgba(255, 255, 255, 0.1);
-  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.18s ease;
   width: clamp(240px, 18vw, 320px);
   display: flex;
   flex-direction: column;
@@ -13,6 +13,7 @@
     inset -1px 0 0 rgba(255, 255, 255, 0.1);
   position: relative;
   overflow: hidden;
+  opacity: 1;
 }
 
 .futuristic-sidebar::before {
@@ -41,6 +42,25 @@
   -webkit-backdrop-filter: none !important;
   border-right: none !important;
   box-shadow: none !important;
+  opacity: 0; /* 視覚を素早く消す（トグルは下で復活） */
+}
+.futuristic-sidebar.collapsed {
+  /* 折りたたみ時は基本的にマウス操作を透過させ、下層のコンテンツを操作可能にする */
+  pointer-events: none;
+}
+.futuristic-sidebar.collapsed .sidebar-toggle {
+  /* トグルボタンだけは復活させる（折りたたんだ状態から開けるように） */
+  pointer-events: auto; /* enable clicks on the toggle */
+  position: absolute; /* 親要素が狭いため絶対位置にしてクリック領域を確保 */
+  left: 0.5px;
+  top: 8px;
+  width: 36px; /* 元のボタン幅を確保しつつ、見切れていてもクリック可能 */
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(0, 150, 255, 0.18) 0%, rgba(0, 100, 200, 0.12) 100%);
+  border-radius: 8px;
 }
 .futuristic-sidebar.collapsed * {
   background: transparent !important;
@@ -421,6 +441,31 @@
   
   .futuristic-sidebar.collapsed {
     width: 60px;
+  }
+  .futuristic-sidebar.collapsed .sidebar-title,
+  .futuristic-sidebar.collapsed .sidebar-nav,
+  .futuristic-sidebar.collapsed .sidebar-content {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .futuristic-sidebar.collapsed .sidebar-toggle {
+    opacity: 1; /* ルートのフェードに勝つ */
+  }
+
+  /* 折りたたみ時のクリックハンドル */
+  .sidebar-collapsed-handle {
+    position: absolute;
+    left: 0;
+    top: 8px;
+    width: 12px;
+    height: 36px;
+    z-index: 9999;
+    pointer-events: auto; /* クリックを受ける */
+    background: rgba(255,255,255,0.02); /* ほぼ透明だがクリック領域を確保 */
+    border-radius: 6px;
+  }
+  .sidebar-collapsed-handle:hover {
+    background: rgba(255,255,255,0.04);
   }
   
   .sidebar-header {

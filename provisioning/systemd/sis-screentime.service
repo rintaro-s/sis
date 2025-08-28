@@ -1,0 +1,6 @@
+[Unit]
+Description=Enforce screen time restrictions
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sis/enforce-screentime.sh

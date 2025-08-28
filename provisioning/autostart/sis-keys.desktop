@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=SIS Keybindings (One-time)
+Exec=/bin/bash -lc '/opt/sis/scripts/install-keybindings.sh --once'
+Terminal=false
+X-GNOME-Autostart-enabled=true
+OnlyShowIn=GNOME;SISUI;
+NoDisplay=true
