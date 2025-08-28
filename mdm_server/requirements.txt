@@ -1,0 +1,4 @@
+flask>=2.3
+pyotp>=2.9
+PyJWT>=2.8
+requests>=2.31

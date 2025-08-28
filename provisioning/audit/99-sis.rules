@@ -1,0 +1,13 @@
+## SIS audit rules: log logon/logoff, process exec, network changes, removable media
+# Log sudo/su usage
+-w /var/log/auth.log -p wa -k authlog
+# Monitor execve
+-a always,exit -F arch=b64 -S execve,execveat -k proc_exec
+-a always,exit -F arch=b32 -S execve,execveat -k proc_exec
+# Track login records
+-w /var/log/wtmp -p wa -k logins
+-w /var/run/utmp -p wa -k logins
+# Removable devices mount events
+-w /media -p wa -k media
+# NetworkManager state changes (dispatcher logs)
+-w /var/log/syslog -p wa -k net

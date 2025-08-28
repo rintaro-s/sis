@@ -1,0 +1,9 @@
+[Unit]
+Description=SIS MDM agent task
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sis/mdm-agent.sh checkin
+ExecStart=/usr/local/sis/mdm-agent.sh apply

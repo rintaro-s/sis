@@ -1,0 +1,13 @@
+[Unit]
+Description=SIS unattended upgrades outside class hours
+After=network-online.target
+Wants=sis-upgrade.timer
+
+[Service]
+Type=oneshot
+Environment=SIS_CLASS_START_HHMM=0830
+Environment=SIS_CLASS_END_HHMM=1630
+ExecStart=/usr/local/sis/profiled.sh upgrade
+
+[Install]
+WantedBy=multi-user.target

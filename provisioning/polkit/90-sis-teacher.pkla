@@ -1,0 +1,6 @@
+[Group]
+Identity=unix-group:sis-teacher
+Action=org.freedesktop.login1.*;org.freedesktop.udisks2.*;org.freedesktop.upower.*;org.freedesktop.NetworkManager.*;org.freedesktop.packagekit.*
+ResultActive=yes
+ResultAny=no
+ResultInactive=no

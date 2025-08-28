@@ -1,0 +1,8 @@
+[Unit]
+Description=SIS Exam Mode Control (manual)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sis/exam-mode.sh on
+ExecStop=/usr/local/sis/exam-mode.sh off
+RemainAfterExit=yes

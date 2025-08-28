@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# NetworkManager dispatcher hook: logs connectivity changes
+# Installed to /etc/NetworkManager/dispatcher.d/90-sis-log
+IFACE="$1"; ACTION="$2"
+logger -t sis-nm "Interface=$IFACE state=$ACTION $(nmcli -t -f GENERAL.CONNECTION dev show "$IFACE" 2>/dev/null | sed 's/GENERAL.CONNECTION://')"

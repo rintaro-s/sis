@@ -1,0 +1,12 @@
+[Unit]
+Description=SIS zero-touch first boot wizard
+After=multi-user.target network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/sis-zerotouch.done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sis/zerotouch-wizard.sh
+
+[Install]
+WantedBy=multi-user.target

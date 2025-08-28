@@ -1,0 +1,3 @@
+# Log USB storage add/remove and restrict autorun
+ACTION=="add|remove", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", RUN+="/usr/bin/logger -t sis-usb 'USB %E{ACTION}: %k (%E{ID_SERIAL})'"
+# Default to noexec,nodev,nosuid via udisks options (best effort handled in installer too)

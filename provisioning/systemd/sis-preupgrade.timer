@@ -1,0 +1,9 @@
+[Unit]
+Description=Schedule pre-upgrade snapshot nightly
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

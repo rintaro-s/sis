@@ -1,0 +1,6 @@
+[Unit]
+Description=Execute SIS remote wipe
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sis/remote-wipe.sh

@@ -1,0 +1,10 @@
+[Unit]
+Description=Schedule SIS upgrades periodically
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

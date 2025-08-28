@@ -1,0 +1,10 @@
+[Unit]
+Description=SIS pre-upgrade snapshot
+Wants=sis-preupgrade.timer
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sis/pre-update-snapshot.sh
+
+[Install]
+WantedBy=multi-user.target
