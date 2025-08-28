@@ -88,6 +88,10 @@ systemd タイマーで checkin/apply/poll を定期実行する設計に拡張�
 - ローカルのLLMサーバー（例: LMstudio, Ollama, llama.cppサーバー）と連携して、チャットやコマンド生成ができます。  
 - まだ全部はできてないけど、だいたい動くところは動きます。
 
+
+https://github.com/user-attachments/assets/bbae3072-a3e8-4e8c-b9b8-a91d429318ed
+
+
 体験的なUI（このブランチの変更点）:
 - Alt+Space 長押しで「Halo HUD + 円形メニュー」、短押しでコマンドパレット
 - 3つのホットコーナー（左上=パレット、右上=内蔵ターミナル、右下=コントロールセンター）
