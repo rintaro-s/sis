@@ -225,6 +225,25 @@ Type=Application
 DesktopNames=SISUI;GNOME
 XS
 
+# Remove/disable upstream Ubuntu 'subiquity' snap auto-launch pieces which will loop
+# when snapd/subiquity is not present in the live environment. This prevents the
+# repeated "error: snap \"subiquity\" is not installed" messages during boot.
+echo "[info] Disabling subiquity/snap auto-launch units in live root..."
+rm -f "$ROOTFS_MNT/usr/bin/subiquity-shell" \
+  "$ROOTFS_MNT/bin/subiquity-shell" \
+  "$ROOTFS_MNT/usr/lib/systemd/system/subiquity_config.mount" || true
+
+# remove subiquity serial-getty drop-ins (two common locations)
+rm -f "$ROOTFS_MNT/usr/lib/systemd/system/serial-getty@.service.d/subiquity-serial.conf" \
+  "$ROOTFS_MNT/usr/lib/systemd/system/serial-getty@sclp_line0.service.d/subiquity-serial.conf" || true
+
+## 注意: デスクトップインストーラは snap ベースのため、snap 系ユニットの一括削除は行わない
+
+# If cloud-init points at subiquity-shell, fall back to /bin/sh so it won't call snap
+if [[ -f "$ROOTFS_MNT/etc/cloud/cloud.cfg" ]]; then
+  sed -i "s|shell: /usr/bin/subiquity-shell|shell: /bin/sh|g" "$ROOTFS_MNT/etc/cloud/cloud.cfg" || true
+fi
+
 # 3.5) Optional: FULL mode — install GPU/MDM related packages and enable timers (chroot)
 if [[ $FULL -eq 1 ]]; then
   echo "[FULL] Installing GPU/MDM packages inside live root..."
@@ -265,7 +284,22 @@ done
 rm -f "$SQUASH"
 mksquashfs "$ROOTFS_MNT" "$SQUASH" -noappend -comp xz >/dev/null
 
-# 5) Build ISO back while reusing original boot setup (replay)
+# 4.5) ISO ルートにも /opt/sis を同梱しておく（/cdrom/opt/sis として参照可能）
+mkdir -p "$EXTRACT/opt/sis"
+rsync -a --delete --exclude '.git' --exclude 'node_modules' \
+  --exclude 'src-tauri/target' --exclude 'sis-ui/node_modules' \
+  --exclude 'build-iso-work' --exclude 'dist' \
+  "$SRC_ROOT/" "$EXTRACT/opt/sis/"
+
+# 4.6) dist/nocloud があれば ISO に同梱（自動インストール用の任意シード）
+SEED_SRC=$(readlink -f "$SRC_ROOT/dist/nocloud" 2>/dev/null || true)
+if [[ -d "$SEED_SRC" ]]; then
+  echo "[info] Embedding nocloud seed from $SEED_SRC"
+  mkdir -p "$EXTRACT/nocloud"
+  rsync -a "$SEED_SRC/" "$EXTRACT/nocloud/"
+fi
+
+# 5) ISO を mkisofs 互換モードで再生成（BIOS/EFI 起動を明示）
 cd "$EXTRACT"
 # Update md5sum.txt
 if [[ -f md5sum.txt ]]; then
@@ -273,12 +307,12 @@ if [[ -f md5sum.txt ]]; then
   find . -type f -print0 | sort -z | xargs -0 md5sum > md5sum.txt || true
 fi
 
-# Use xorriso to replay boot parameters from source ISO and map our modified tree
-xorriso \
-  -indev "$SRC_ISO" \
-  -outdev "$OUT_ISO" \
-  -volid "$ISO_LABEL" \
-  -map "$EXTRACT" / \
-  -boot_image any replay
+xorriso -as mkisofs \
+  -r -V "$ISO_LABEL" \
+  -o "$OUT_ISO" \
+  -J -joliet-long -l \
+  -b "[BOOT]/1-Boot-NoEmul.img" -no-emul-boot -c boot.catalog -boot-load-size 4 -boot-info-table \
+  -eltorito-alt-boot -e "EFI/boot/bootx64.efi" -no-emul-boot \
+  "$EXTRACT"
 
 echo "Built: $OUT_ISO"

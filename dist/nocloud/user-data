@@ -1,0 +1,23 @@
+#cloud-config
+autoinstall:
+  version: 1
+  identity:
+    hostname: sis-vm
+    username: rinta
+    password: "$6$AQcQAjvIpSCkXwsu$4UnR39upbBdtS2.5kNkOqOuDuFtb5rCPMudL0GNpMtM4MxLo5EIBodh8QlFtNXpOKz4c.Ve1k6h362M6qTrDH1"
+  locale: ja_JP
+  keyboard:
+    layout: jp
+  storage:
+    layout:
+      name: direct
+  ssh:
+    install-server: true
+  packages:
+    - gnome-terminal
+  late-commands:
+    - curtin in-target --target=/target -- systemctl enable sis-firstboot.service || true
+    - curtin in-target --target=/target -- mkdir -p /opt/sis || true
+    - curtin in-target --target=/target -- cp -a /cdrom/opt/sis/* /opt/sis/ || true
+    - curtin in-target --target=/target -- chown -R 1000:1000 /opt/sis || true
+    - curtin in-target --target=/target -- mkdir -p /var/lib/sis && touch /var/lib/sis/firstboot.done || true
