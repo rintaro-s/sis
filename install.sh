@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+
 # SIS Unified Installer for Ubuntu 24+
 # 目的:
 #  - デスクトップ(UI)配備（既存の DE-deploy.sh を活用）

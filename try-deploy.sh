@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+
+#　一番マトモに動くと思うスクリプト
+
 set -euo pipefail
 
 # Fail-friendly logging

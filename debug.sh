@@ -1,5 +1,7 @@
 #!/bin/bash
 
+##　テストするときに楽なやつ
+
 rm -r -f sis
 git clone https://github.com/rintaro-s/sis.git
 sudo apt remove sis-ui -y

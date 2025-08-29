@@ -1,5 +1,7 @@
 #!/bin/bash
 
+#package_install.sh と一緒に使ってね。
+
 # SIST UI 開発環境を整えるためのスクリプトだよ！
 # 最初に一度だけ実行してね。
 

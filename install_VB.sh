@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# VirtualBoxのインストールスクリプト
+
 # --- 設定 ---
 # Ubuntuのコードネームを設定
 # Ubuntu 22.04 LTS: jammy
