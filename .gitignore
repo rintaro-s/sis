@@ -13,3 +13,4 @@ build-iso-work/rootfs/
 **/*.snap
 **/*.deb
 .ssh/
+live-build-config/

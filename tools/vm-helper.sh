@@ -3,7 +3,7 @@ set -euo pipefail
 
 # VM helper: build ISO, create disk, install, run, stop, status, tail logs
 # Usage examples:
-#   ./tools/vm-helper.sh build-iso ~/ubuntu-24.04.2-desktop-amd64.iso
+#   ./tools/vm-helper.sh build-iso
 #   ./tools/vm-helper.sh install             # ISO から通常インストール（GUI表示）
 #   ./tools/vm-helper.sh run                 # インストール済みディスクから起動（GUI表示）
 #   ./tools/vm-helper.sh tail                # 直近のシリアルログを確認
@@ -39,17 +39,8 @@ QEMU_IMG=${QEMU_IMG:-qemu-img}
 need_bin() { command -v "$1" >/dev/null 2>&1 || { echo "Missing: $1" >&2; exit 2; }; }
 
 build_iso() {
-  local src_iso=${1:-}
-  if [[ -z "$src_iso" ]]; then
-    echo "Usage: $0 build-iso /path/to/ubuntu-*.iso" >&2
-    exit 2
-  fi
-  if [[ ! -f "$src_iso" ]]; then
-    echo "Source ISO not found: $src_iso" >&2
-    exit 2
-  fi
-  echo "[build-iso] Using base: $src_iso"
-  sudo "$ROOT_DIR/tools/make-iso.sh" "$(readlink -f "$src_iso")"
+  echo "[build-iso] Building with live-build..."
+  sudo "$ROOT_DIR/tools/make-iso.sh"
   ls -lh "$ISO_OUT"
 }
 
@@ -66,7 +57,7 @@ create_disk() {
 
 start_install() {
   need_bin "$QEMU_BIN"
-  [[ -f "$ISO_OUT" ]] || { echo "Custom ISO not found: $ISO_OUT. Run: $0 build-iso <base.iso>" >&2; exit 2; }
+  [[ -f "$ISO_OUT" ]] || { echo "Custom ISO not found: $ISO_OUT. Run: $0 build-iso" >&2; exit 2; }
   create_disk
   rm -f "$SER_INSTALL" "$RUN_LOG" "$PID_INSTALL" "$MON_INSTALL"
   echo "[install] Starting QEMU (GUI). Serial -> $SER_INSTALL"
@@ -80,6 +71,7 @@ start_install() {
     -monitor unix:"$MON_INSTALL",server,nowait \
     -drive file="$DISK_IMG",if=virtio \
     -cdrom "$ISO_OUT" -boot d \
+    -device usb-ehci,id=ehci \
     -device usb-tablet \
     -nic user,model=virtio-net-pci \
     -serial file:"$SER_INSTALL" \
@@ -104,6 +96,7 @@ start_guest() {
     -monitor unix:"$MON_GUEST",server,nowait \
     -drive file="$DISK_IMG",if=virtio \
     -boot c \
+    -device usb-ehci,id=ehci \
     -device usb-tablet \
     -nic user,model=virtio-net-pci \
     -serial file:"$SER_GUEST" \
@@ -139,12 +132,15 @@ status() {
     else
       echo "[$tag] not running"
     fi
-  end
+  done
 }
 
 tail_logs() {
   for f in "$SER_INSTALL" "$SER_GUEST"; do
-    [[ -f "$f" ]] && { echo "--- $f ---"; tail -n 200 "$f"; }
+    if [[ -f "$f" ]]; then
+      echo "--- $f ---"
+      tail -n 200 "$f"
+    fi
   done
 }
 
@@ -157,7 +153,7 @@ clean() {
 usage() {
   cat <<USAGE
 Usage: $0 <command> [args]
-  build-iso <base.iso>   Build custom ISO via tools/make-iso.sh (requires sudo)
+  build-iso              Build custom ISO via tools/make-iso.sh (requires sudo)
   install                Start installer from ISO (GUI window)
   run                    Boot installed disk (GUI window)
   stop                   Stop running QEMU VMs
@@ -171,7 +167,7 @@ USAGE
 
 cmd=${1:-}
 case "$cmd" in
-  build-iso) shift; build_iso "${1:-}";;
+  build-iso) shift; build_iso;;
   install)   shift; start_install;;
   run)       shift; start_guest;;
   stop)      shift; stop_all;;
