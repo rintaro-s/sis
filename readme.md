@@ -6,6 +6,8 @@
 - **テストされたのはデスクトップ環境のみです。**
 - **ISO化はまだうまく行っていません**
 
+概要と使い方要約：https://protopedia.net/prototype/7373
+
 
 **気軽に試せる**：`setup.sh` 　→　`try-deploy.sh`
 
