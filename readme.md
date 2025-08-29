@@ -1,11 +1,13 @@
 # SIS Unified Setup（学校端末OS / 管理スイート）
 
-このリポジトリは Ubuntu 24+ をベースにした学校向け端末の魔改造セットアップを提供します。
+このリポジトリは Ubuntu 24+ をベースにした学校向け＆使う人向け端末の魔改造セットアップを提供します。
 
 主コマンド: `install.sh`
 
 - 監査/ログ収集、更新管理（授業時間帯回避）、DNSフィルタ、MDMフック、ゼロタッチ初期化、授業系下地（Veyon/試験モード）を一括導入します。
 - デスクトップは `DE-deploy.sh` で sis-ui を配備します。
+
+- 早くUI見たい方は：https://github.com/rintaro-s/sis?tab=readme-ov-file#sis-ui
 
 ## 使い方（セットアップ）
 
