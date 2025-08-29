@@ -14,3 +14,4 @@ build-iso-work/rootfs/
 **/*.deb
 .ssh/
 live-build-config/
+mdm_server/clients/.venv/

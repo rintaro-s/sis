@@ -1,9 +1,9 @@
 #!/bin/bash
 
-#package_install.sh と一緒に使ってね。
 
-# SIST UI 開発環境を整えるためのスクリプトだよ！
-# 最初に一度だけ実行してね。
+#
+# このこれからaptパッケージを使用したpackage_install.shに移行しました。
+#
 
 echo "--- SIST UI 開発環境のセットアップを開始します ---"
 
