@@ -44,6 +44,7 @@ sudo apt-get install -y \
     libgtk-3-dev \
     npm \
     rustup \
+    libwebkit2gtk-4.1-dev \
     libwebkit2gtk-4.1-dev
 
 # Optional app ecosystem

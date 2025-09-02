@@ -16,12 +16,10 @@ class SISManager:
     def run_command(self, cmd, cwd=None, shell=False):
         """コマンドを実行"""
         try:
-            result = subprocess.run(cmd, cwd=cwd or self.root_dir, shell=shell, check=True, capture_output=True, text=True)
-            print(result.stdout)
+            result = subprocess.run(cmd, cwd=cwd or self.root_dir, shell=shell, check=True)
             return True
         except subprocess.CalledProcessError as e:
             print(f"Error: {e}")
-            print(e.stderr)
             return False
 
     def install_full(self, args):
