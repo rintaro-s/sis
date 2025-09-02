@@ -41,16 +41,41 @@ sudo apt remove sis-ui -y || true
 echo "[2/5] Build frontend & Tauri app (release)"
 # 1. フロントエンド（Vite/React）
 pushd "$UI_DIR" >/dev/null
-	command -v npm >/dev/null 2>&1 || die "npm not found. Please install Node.js and npm."
-	npm ci
-	npm run build
+	# If this script is running as root (e.g. via sudo from DE-deploy.sh),
+	# run the build commands as the original invoking user so that nvm and
+	# user-local cargo are available on PATH. Otherwise run normally.
+	if [[ $EUID -eq 0 ]]; then
+		BUILD_USER="${SUDO_USER:-$(logname 2>/dev/null || echo root)}"
+		log "Detected root; running frontend build as user: $BUILD_USER"
+		# use a single shell invocation under the target user to preserve their shell init
+		sudo -u "$BUILD_USER" -H bash -lc 'set -euo pipefail; cd "'"$UI_DIR"'" || exit 1; command -v npm >/dev/null 2>&1 || { echo "npm not found for user $USER" >&2; exit 2; }; npm ci && npm run build'
+		RC=$?
+		if [[ $RC -ne 0 ]]; then
+			die "Frontend build failed (exit $RC). Ensure Node.js/npm and project deps are installed for user $BUILD_USER."
+		fi
+	else
+		command -v npm >/dev/null 2>&1 || die "npm not found. Please install Node.js and npm."
+		npm ci
+		npm run build
+	fi
 popd >/dev/null
-# 2. Rust/Tauri ビルド（Linux向け）
+# 2. Rust/Tauri ビルド（Linux向け）続行
 # MUST use tauri build to ensure frontend assets are embedded into the binary
 pushd "$UI_DIR" >/dev/null
-	command -v npx >/dev/null 2>&1 || die "npx not found. Please install Node.js/npm."
-	# Limit bundling to deb/rpm to avoid AppImage (linuxdeploy) issues; the binary is still produced under target/release
-	npx tauri build --bundles deb,rpm -- --manifest-path "$UI_DIR/src-tauri/Cargo.toml"
+	# Similarly run tauri build as the non-root user if invoked via sudo so cargo is on PATH.
+	if [[ $EUID -eq 0 ]]; then
+		BUILD_USER="${SUDO_USER:-$(logname 2>/dev/null || echo root)}"
+		log "Detected root; running Tauri build as user: $BUILD_USER"
+		sudo -u "$BUILD_USER" -H bash -lc 'set -euo pipefail; cd "'"$UI_DIR"'" || exit 1; command -v npx >/dev/null 2>&1 || { echo "npx not found for user $USER" >&2; exit 2; }; npx tauri build --bundles deb,rpm -- --manifest-path "'"$UI_DIR"'/src-tauri/Cargo.toml"'
+		RC=$?
+		if [[ $RC -ne 0 ]]; then
+			die "Tauri build failed (exit $RC). Ensure Rust/cargo and @tauri/cli are installed for user $BUILD_USER."
+		fi
+	else
+		command -v npx >/dev/null 2>&1 || die "npx not found. Please install Node.js/npm."
+		# Limit bundling to deb/rpm to avoid AppImage (linuxdeploy) issues; the binary is still produced under target/release
+		npx tauri build --bundles deb,rpm -- --manifest-path "$UI_DIR/src-tauri/Cargo.toml"
+	fi
 popd >/dev/null
 
 # 生成物の場所: 複数の候補ディレクトリをチェックして、最初に見つかったバイナリを使う
