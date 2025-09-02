@@ -71,7 +71,7 @@ PoC スクリプト: `live/provision-ap.sh`
 - 授業中: 必要に応じて画面ロック/解除、任意コマンドでアプリ起動制御、提出物は students 側から submit-file
 - 授業後: 回収ファイルを確認、ログを確認、次回のポリシーを編集
 
-### 重要なポリシー項目（提案）
+### 重要なポリシー項目
 - monitoring.screen: 画面の静止画取得可否（ON時は撮影時に生徒へ通知）
 - monitoring.web_history: 検索/閲覧履歴の収集可否（デフォルトOFF、ONなら生徒へ常時表示）
 - monitoring.images: 画像ファイルの内容検査可否（デフォルトOFF、違反検知時のみ匿名統計）
